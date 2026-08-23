@@ -21,9 +21,10 @@ session.close()
 ```
 
 `PlotSession` exposes `disconnect()`, `close()`,
-`remove_selected_cursor()`, and `clear_extra_cursors()`. Disconnect and close
-are idempotent; close also removes the figure from Matplotlib. `SeriesData`
-copies its arrays and makes them read-only. Dynamic updates are intentionally
+`remove_selected_cursor()`, `clear_extra_cursors()`,
+`toggle_axes_maximized(axis)`, and `restore_layout()`. Disconnect and close are
+idempotent; close also removes the figure from Matplotlib. `SeriesData` copies
+its arrays and makes them read-only. Dynamic updates are intentionally
 unsupported for now: create a new session when the source data changes.
 
 ## Data and synchronization rules
@@ -48,17 +49,24 @@ about the future business-data interface.
 - Left click selects that series' permanent default cursor and toggles its
   locked state. Locked cursors ignore mouse and keyboard movement.
 - Shift+left click adds a locked extra cursor. Delete/Backspace removes the
-  selected extra cursor; Esc clears all extras. Default cursors cannot be
-  deleted.
+  selected extra cursor. Default cursors cannot be deleted.
 - Left/Right and Home/End move only an explicitly selected, unlocked cursor,
   then synchronize the other unlocked cursors.
 - Drag a visible tooltip to reposition its text. Cursor interaction pauses
   while tooltip dragging or toolbar pan/zoom is active.
+- Double-click a subplot background to make that axes fill the current
+  Matplotlib figure. Double-click it again to restore the exact captured
+  layout. Programmatic switching restores the previous axes before maximizing
+  the next one.
+- While an axes is maximized, Esc restores the six-panel layout and preserves
+  extra cursors. Outside maximized mode, Esc clears all extra cursors.
+- Drag anywhere on a legend box or its labels to reposition the whole legend.
+  Legend and tooltip gestures take priority over subplot maximization.
 
 Tooltips first appear on hover or selection and use the axis formatter for
-frame text. Selected and locked cursors have separate visual cues. Cursor
-vertical lines use axes coordinates, so they continue spanning the axes after
-pan or zoom.
+frame text. Cursors use only point markers and tooltips. A gold marker edge
+identifies the selected cursor, while a square marker identifies a locked
+cursor.
 
 ## Demo, tests, and performance
 

@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import CloseEvent, DrawEvent, KeyEvent, MouseEvent
 from matplotlib.figure import Figure
+from matplotlib.legend import Legend
 
 from .model import SeriesData
 
@@ -26,7 +27,7 @@ class DataCursor:
     """
 
     class Cursor:
-        """单个游标实例（竖线 + 高亮点 + tooltip）。"""
+        """单个游标实例（高亮点 + tooltip）。"""
 
         def __init__(
             self,
@@ -44,9 +45,6 @@ class DataCursor:
             self.is_default = is_default
             self.color = color
 
-            self.vline = ax.axvline(
-                x=x0, color="black", linestyle="--", alpha=0.5, zorder=4
-            )
             (self.highlight,) = ax.plot(
                 [x0], [y0], marker="o", color=color, markersize=8, zorder=5
             )
@@ -65,8 +63,20 @@ class DataCursor:
             self.highlight.set_markersize(10 if selected else 8)
             self.highlight.set_markeredgecolor("gold" if selected else self.color)
             self.highlight.set_markeredgewidth(2 if selected else 1)
-            self.vline.set_color("darkred" if self.locked else "black")
-            self.vline.set_linewidth(2 if selected else 1)
+
+    @dataclass(frozen=True, slots=True)
+    class CursorState:
+        cursor: DataCursor.Cursor
+        current_index: int
+        locked: bool
+        tooltip_visible: bool
+        tooltip_position: tuple[float, float]
+        tooltip_text: str
+
+    @dataclass(frozen=True, slots=True)
+    class StateSnapshot:
+        cursors: tuple[DataCursor.CursorState, ...]
+        selected: DataCursor.Cursor | None
 
     def __init__(self, ax: Axes, series_list: Sequence[SeriesData]) -> None:
         self.ax = ax
@@ -214,7 +224,6 @@ class DataCursor:
 
         cursor.current_index = local_idx
         x_value, y_value = frames[local_idx], values[local_idx]
-        cursor.vline.set_xdata([x_value, x_value])
         cursor.highlight.set_data([x_value], [y_value])
         cursor.tooltip.xy = (x_value, y_value)
         label = series.label
@@ -363,7 +372,6 @@ class DataCursor:
         if cursor is None or cursor.is_default:
             return False
         owner_default = self.cursors[cursor.series_idx]
-        cursor.vline.remove()
         cursor.highlight.remove()
         cursor.tooltip.remove()
         self.cursors.remove(cursor)
@@ -374,7 +382,6 @@ class DataCursor:
     def clear_extra_cursors(self, *, request_draw: bool = True) -> int:
         extras = [cursor for cursor in self.cursors if not cursor.is_default]
         for cursor in extras:
-            cursor.vline.remove()
             cursor.highlight.remove()
             cursor.tooltip.remove()
             self.cursors.remove(cursor)
@@ -390,6 +397,45 @@ class DataCursor:
 
     def contains_tooltip(self, event: MouseEvent) -> bool:
         return any(cursor.tooltip.contains(event)[0] for cursor in self.cursors)
+
+    def capture_state(self) -> StateSnapshot:
+        return DataCursor.StateSnapshot(
+            cursors=tuple(
+                DataCursor.CursorState(
+                    cursor=cursor,
+                    current_index=cursor.current_index,
+                    locked=cursor.locked,
+                    tooltip_visible=cursor.tooltip.get_visible(),
+                    tooltip_position=cursor.tooltip.get_position(),
+                    tooltip_text=cursor.tooltip.get_text(),
+                )
+                for cursor in self.cursors
+            ),
+            selected=self._selected,
+        )
+
+    def restore_state(self, snapshot: StateSnapshot) -> None:
+        captured_cursors = [state.cursor for state in snapshot.cursors]
+        for cursor in tuple(self.cursors):
+            if cursor in captured_cursors:
+                continue
+            cursor.highlight.remove()
+            cursor.tooltip.remove()
+        self.cursors = captured_cursors
+        self._selected = snapshot.selected
+        for state in snapshot.cursors:
+            cursor = state.cursor
+            cursor.locked = state.locked
+            self._update_cursor_visuals(
+                cursor, state.current_index, show_tooltip=False
+            )
+            cursor.tooltip.set_visible(state.tooltip_visible)
+            cursor.tooltip.set_position(state.tooltip_position)
+            cursor.tooltip.set_text(state.tooltip_text)
+            cursor.apply_style(cursor is self._selected)
+        self._dragging_cursor = None
+        self._drag_start_mouse = None
+        self._drag_start_position = None
 
     def disconnect(self) -> None:
         if not self._connected:
@@ -407,17 +453,107 @@ class DataCursor:
         self._connected = False
 
 
+@dataclass(frozen=True, slots=True)
+class AxesLayoutState:
+    """Captured state required to restore one axes exactly."""
+
+    visible: bool
+    in_layout: bool
+    original_position: tuple[float, float, float, float]
+    active_position: tuple[float, float, float, float]
+
+
+class AxesLayoutManager:
+    """Maximize one axes inside a figure and restore the captured layout."""
+
+    def __init__(self, figure: Figure, axes: Sequence[Axes]) -> None:
+        self.figure = figure
+        self.axes = tuple(axes)
+        self._states = {
+            axis: AxesLayoutState(
+                visible=axis.get_visible(),
+                in_layout=axis.get_in_layout(),
+                original_position=tuple(axis.get_position(original=True).bounds),
+                active_position=tuple(axis.get_position().bounds),
+            )
+            for axis in self.axes
+        }
+        visible_states = [
+            state for state in self._states.values() if state.visible
+        ]
+        left = min(state.active_position[0] for state in visible_states)
+        bottom = min(state.active_position[1] for state in visible_states)
+        right = max(
+            state.active_position[0] + state.active_position[2]
+            for state in visible_states
+        )
+        top = max(
+            state.active_position[1] + state.active_position[3]
+            for state in visible_states
+        )
+        self._maximized_position = (left, bottom, right - left, top - bottom)
+        self.maximized_axes: Axes | None = None
+
+    def toggle(self, axis: Axes) -> bool:
+        if axis not in self._states:
+            raise ValueError("axis does not belong to this PlotSession")
+        if self.maximized_axes is axis:
+            self.restore()
+            return False
+        if self.maximized_axes is not None:
+            self.restore(request_draw=False)
+        for candidate in self.axes:
+            candidate.set_visible(candidate is axis)
+            candidate.set_in_layout(False)
+        axis.set_position(self._maximized_position, which="both")
+        axis.set_in_layout(False)
+        self.maximized_axes = axis
+        self.figure.canvas.draw_idle()
+        return True
+
+    def restore(self, *, request_draw: bool = True) -> bool:
+        if self.maximized_axes is None:
+            return False
+        for axis, state in self._states.items():
+            axis.set_visible(state.visible)
+            axis.set_position(state.original_position, which="original")
+            axis.set_position(state.active_position, which="active")
+            axis.set_in_layout(state.in_layout)
+        self.maximized_axes = None
+        if request_draw:
+            self.figure.canvas.draw_idle()
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class PendingAxesClick:
+    controller: DataCursor
+    axis: Axes
+    snapshot: DataCursor.StateSnapshot
+
+
 class FigureDispatcher:
     """Route one set of canvas events to all panel controllers in a figure."""
 
     def __init__(
-        self, figure: Figure, controllers: Sequence[DataCursor]
+        self,
+        figure: Figure,
+        controllers: Sequence[DataCursor],
+        axes: Sequence[Axes],
     ) -> None:
         self.figure = figure
         self.controllers = tuple(controllers)
         self._by_axes = {controller.ax: controller for controller in self.controllers}
+        self.legends = tuple(
+            legend
+            for axis in axes
+            if (legend := axis.get_legend()) is not None
+        )
         self.active_controller: DataCursor | None = None
         self.dragging_controller: DataCursor | None = None
+        self.dragging_legend: Legend | None = None
+        self.layout = AxesLayoutManager(figure, axes)
+        self._pending_axes_click: PendingAxesClick | None = None
         self.connected = True
         canvas = figure.canvas
         self._canvas_callback_ids = [
@@ -434,8 +570,20 @@ class FigureDispatcher:
         toolbar = getattr(manager, "toolbar", None)
         return bool(getattr(toolbar, "mode", ""))
 
+    def _legend_at(self, event: MouseEvent) -> Legend | None:
+        return next(
+            (
+                legend
+                for legend in self.legends
+                if legend.get_visible() and legend.contains(event)[0]
+            ),
+            None,
+        )
+
     def on_motion(self, event: MouseEvent) -> None:
         if self._toolbar_is_active():
+            return
+        if self.dragging_legend is not None:
             return
         if self.dragging_controller is not None:
             self.dragging_controller.on_hover(event)
@@ -448,6 +596,13 @@ class FigureDispatcher:
 
     def on_press(self, event: MouseEvent) -> None:
         if self._toolbar_is_active() or self.dragging_controller is not None:
+            self._pending_axes_click = None
+            return
+        legend = self._legend_at(event)
+        if legend is not None:
+            self._pending_axes_click = None
+            if getattr(event, "button", None) == 1:
+                self.dragging_legend = legend
             return
         controller = next(
             (
@@ -457,25 +612,64 @@ class FigureDispatcher:
             ),
             None,
         )
+        if controller is not None:
+            self._pending_axes_click = None
+            self.active_controller = controller
+            controller.on_click(event)
+            if controller.is_dragging:
+                self.dragging_controller = controller
+            return
         if controller is None:
             controller = self._by_axes.get(event.inaxes)
         if controller is None:
+            self._pending_axes_click = None
             return
+        if getattr(event, "button", None) == 1 and getattr(
+            event, "dblclick", False
+        ):
+            pending = self._pending_axes_click
+            if (
+                pending is not None
+                and pending.controller is controller
+                and pending.axis is event.inaxes
+            ):
+                controller.restore_state(pending.snapshot)
+            self._pending_axes_click = None
+            self.active_controller = controller
+            self.layout.toggle(controller.ax)
+            return
+        self._pending_axes_click = None
+        if getattr(event, "button", None) == 1:
+            self._pending_axes_click = PendingAxesClick(
+                controller=controller,
+                axis=controller.ax,
+                snapshot=controller.capture_state(),
+            )
         self.active_controller = controller
         controller.on_click(event)
         if controller.is_dragging:
             self.dragging_controller = controller
 
     def on_release(self, event: MouseEvent) -> None:
+        if self.dragging_legend is not None:
+            self.dragging_legend = None
+            return
         controller = self.dragging_controller or self.active_controller
         if controller is not None:
             controller.on_release(event)
         self.dragging_controller = None
 
     def on_key(self, event: KeyEvent) -> None:
-        if self._toolbar_is_active() or self.dragging_controller is not None:
+        if (
+            self._toolbar_is_active()
+            or self.dragging_controller is not None
+            or self.dragging_legend is not None
+        ):
             return
+        self._pending_axes_click = None
         if getattr(event, "key", "").lower() in ("escape", "esc"):
+            if self.layout.restore():
+                return
             self.clear_extra_cursors()
             return
         if self.active_controller is not None:
@@ -505,15 +699,22 @@ class FigureDispatcher:
     def disconnect(self) -> None:
         if not self.connected:
             return
+        layout_changed = self.layout.restore(request_draw=False)
         for callback_id in self._canvas_callback_ids:
             self.figure.canvas.mpl_disconnect(callback_id)
         self._canvas_callback_ids.clear()
         for controller in self.controllers:
             controller.disconnect()
+        for legend in self.legends:
+            legend.set_draggable(False)
         self.active_controller = None
         self.dragging_controller = None
+        self.dragging_legend = None
         self._by_axes.clear()
+        self._pending_axes_click = None
         self.connected = False
+        if layout_changed:
+            self.figure.canvas.draw_idle()
 
 
 @dataclass(slots=True)
@@ -542,6 +743,16 @@ class PlotSession:
     def clear_extra_cursors(self) -> int:
         return self._dispatcher.clear_extra_cursors()
 
+    def toggle_axes_maximized(self, axis: Axes) -> bool:
+        """Toggle one axes between the captured layout and figure-filling mode."""
+
+        return self._dispatcher.layout.toggle(axis)
+
+    def restore_layout(self) -> bool:
+        """Restore the captured axes layout, returning whether it changed."""
+
+        return self._dispatcher.layout.restore()
+
 
 def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
     """Construct an interactive plot without displaying or blocking."""
@@ -555,6 +766,7 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
     figure, axes_grid = plt.subplots(row_count, column_count, squeeze=False)
     controllers: list[DataCursor] = []
     axes: list[Axes] = []
+    legends: list[Legend] = []
     try:
         grouped: dict[tuple[int, int], list[SeriesData]] = {}
         for item in series_items:
@@ -597,14 +809,18 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                     ax.set_title(panel_title)
                 ax.set_xlabel("Frame Number")
                 ax.set_ylabel("Value")
-                ax.legend(loc="upper right")
+                legend = ax.legend(loc="upper right")
+                legend.set_draggable(True)
+                legends.append(legend)
                 ax.grid(True, linestyle="--", alpha=0.6)
 
         figure.tight_layout()
-        dispatcher = FigureDispatcher(figure, controllers)
+        dispatcher = FigureDispatcher(figure, controllers, axes)
         return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
     except Exception:
         for controller in controllers:
             controller.disconnect()
+        for legend in legends:
+            legend.set_draggable(False)
         plt.close(figure)
         raise
