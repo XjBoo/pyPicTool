@@ -1,16 +1,15 @@
 # Interactive plotting
 
-The project now separates three concerns:
+The package has three layers: `model` defines the temporary internal
+`SeriesData` format, `core` owns reusable Matplotlib construction and cursor
+interactions, and `demo` owns artificial data plus the only blocking
+`plt.show()` call. The real producer's format is still unknown; a future
+adapter should map it into `SeriesData` without changing the plotting core.
 
-- `interactive_plotting.model` defines `SeriesData`, a temporary internal
-  plotting format at the future adapter boundary. It is not a contract for the
-  external data-producing script, whose data format is still unknown.
-- `interactive_plotting.core` owns reusable Matplotlib construction,
-  `PlotSession`, and the existing cursor interaction implementation.
-- `interactive_plotting.demo` owns artificial data, the six-panel demo layout,
-  and the only blocking `plt.show()` call.
+## Reusable API
 
-Reusable callers construct internal series and retain the returned session:
+Callers construct series, retain the returned session for the whole figure
+lifetime, and decide when to show or close it:
 
 ```python
 from interactive_plotting import SeriesData, create_interactive_plot
@@ -18,11 +17,66 @@ from interactive_plotting import SeriesData, create_interactive_plot
 series = [SeriesData(frames=[0, 1], values=[0.0, 1.0], label="example")]
 session = create_interactive_plot(series)
 session.figure.show()
+session.close()
 ```
 
-Callers can later close the figure with their normal Matplotlib lifecycle,
-such as `matplotlib.pyplot.close(session.figure)`. A future adapter should map
-the real producer's data into `SeriesData`; no business-specific adapter is
-defined yet.
+`PlotSession` exposes `disconnect()`, `close()`,
+`remove_selected_cursor()`, and `clear_extra_cursors()`. Disconnect and close
+are idempotent; close also removes the figure from Matplotlib. `SeriesData`
+copies its arrays and makes them read-only. Dynamic updates are intentionally
+unsupported for now: create a new session when the source data changes.
+
+## Data and synchronization rules
+
+- `frames` and `values` must be non-empty, one-dimensional, real numeric arrays
+  of equal length. Frames must all be finite.
+- Non-finite values are missing points: lines break at them, and scatter,
+  hit-testing, synchronization, and tooltips skip them. Every series needs at
+  least one finite value.
+- Hover synchronizes every unlocked cursor by the selected point's actual
+  frame. A series without that exact frame uses its nearest valid frame;
+  equal-distance ties choose the smaller original array index.
+
+The normalized arrays are an internal plotting representation, not a promise
+about the future business-data interface.
+
+## Interaction
+
+- Hover selects the nearest point in screen space and moves all unlocked
+  cursors by frame value.
+- Left click selects that series' permanent default cursor and toggles its
+  locked state. Locked cursors ignore mouse and keyboard movement.
+- Shift+left click adds a locked extra cursor. Delete/Backspace removes the
+  selected extra cursor; Esc clears all extras. Default cursors cannot be
+  deleted.
+- Left/Right and Home/End move only an explicitly selected, unlocked cursor,
+  then synchronize the other unlocked cursors.
+- Drag a visible tooltip to reposition its text. Cursor interaction pauses
+  while tooltip dragging or toolbar pan/zoom is active.
+
+Tooltips first appear on hover or selection and use the axis formatter for
+frame text. Selected and locked cursors have separate visual cues. Cursor
+vertical lines use axes coordinates, so they continue spanning the axes after
+pan or zoom.
+
+## Demo, tests, and performance
 
 For manual testing in VS Code, run `interactive_plot.py` directly.
+`make_demo_series(seed=...)` produces a reproducible six-panel data set without
+opening a window. Automated checks use the Agg backend:
+
+```console
+MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py
+```
+
+The core registers one canvas-event dispatcher per figure and lazily rebuilds
+screen-coordinate caches only after transform changes. Nearest-point search is
+still vectorized O(N) per series per hover event; the benchmark records this
+known boundary without imposing machine-dependent timing thresholds. By
+default the benchmark suppresses `draw_idle()` to isolate dispatch and
+hit-testing; pass `--include-render` to include Agg redraw cost.
+
+Runtime dependencies and the supported Python version are declared in
+`pyproject.toml`. Ruff and mypy configuration is included for future use, but
+those tools are not installed or claimed as part of the current verification.

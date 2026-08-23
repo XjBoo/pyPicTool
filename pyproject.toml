@@ -1,0 +1,16 @@
+[project]
+name = "interactive-plotting"
+version = "0.1.0"
+description = "Reusable Matplotlib cursor interactions with an artificial demo"
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.10",
+    "numpy>=2.0",
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true

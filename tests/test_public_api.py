@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import matplotlib
@@ -7,6 +8,36 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.backend_bases import CloseEvent, KeyEvent, MouseEvent
+from matplotlib.ticker import FuncFormatter
+
+
+def send_mouse_event(session, name, axis, x_value, y_value, **kwargs):
+    session.figure.canvas.draw()
+    x_pixel, y_pixel = axis.transData.transform((x_value, y_value))
+    event = MouseEvent(name, session.figure.canvas, x_pixel, y_pixel, **kwargs)
+    session.figure.canvas.callbacks.process(name, event)
+
+
+def send_key_event(session, key):
+    event = KeyEvent("key_press_event", session.figure.canvas, key=key)
+    session.figure.canvas.callbacks.process("key_press_event", event)
+
+
+def cursor_highlights(axis):
+    return {
+        line.get_color(): line
+        for line in axis.lines
+        if line.get_marker() not in (None, "None", "")
+    }
+
+
+def cursor_highlight_lines(axis):
+    return [
+        line
+        for line in axis.lines
+        if line.get_marker() not in (None, "None", "")
+    ]
 
 from interactive_plotting import SeriesData, make_demo_series
 
@@ -25,7 +56,12 @@ class DemoSeriesTests(unittest.TestCase):
         self.assertTrue(all(isinstance(series, SeriesData) for series in first))
         self.assertEqual(
             [series.panel for series in first],
-            [(row, column) for row in range(3) for column in range(2) for _ in range(2)],
+            [
+                (row, column)
+                for row in range(3)
+                for column in range(2)
+                for _ in range(2)
+            ],
         )
         self.assertTrue(all(series.frames.shape == (100,) for series in first))
         self.assertTrue(all(series.values.shape == (100,) for series in first))
@@ -69,6 +105,339 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(len(session.controllers), 6)
         np.testing.assert_array_equal(session.figure.get_size_inches(), [12.0, 10.0])
         show.assert_called_once_with()
+
+    def test_series_validation_and_missing_values_are_publicly_enforced(self):
+        from interactive_plotting import create_interactive_plot
+
+        invalid_cases = [
+            ("empty", [], []),
+            ("not-1d", [[0, 1]], [[1, 2]]),
+            ("length", [0, 1], [1]),
+            ("frames-finite", [0, np.inf], [1, 2]),
+            ("numeric", ["a", "b"], [1, 2]),
+            ("values-numeric", [0, 1], ["a", "b"]),
+            ("no-valid-values", [0, 1], [np.nan, np.inf]),
+        ]
+        for label, frames, values in invalid_cases:
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(ValueError, label):
+                    SeriesData(frames=frames, values=values, label=label)
+        with self.assertRaisesRegex(ValueError, "at least one series"):
+            create_interactive_plot([])
+
+        caller_frames = np.array([0, 1, 2, 3])
+        caller_values = np.array([1.0, np.nan, np.inf, 4.0])
+        series = SeriesData(
+            frames=caller_frames,
+            values=caller_values,
+            label="gaps",
+        )
+        caller_frames[0] = 99
+        caller_values[0] = 99
+        self.assertEqual(series.frames[0], 0)
+        self.assertEqual(series.values[0], 1.0)
+        self.assertFalse(series.frames.flags.writeable)
+        self.assertFalse(series.values.flags.writeable)
+        session = create_interactive_plot([series])
+        data_line = session.axes[0].lines[0]
+        scatter = session.axes[0].collections[0]
+
+        np.testing.assert_array_equal(
+            np.isnan(data_line.get_ydata()), [False, True, True, False]
+        )
+        self.assertEqual(len(scatter.get_offsets()), 2)
+        send_mouse_event(session, "motion_notify_event", session.axes[0], 1, 2.0)
+        self.assertNotEqual(
+            cursor_highlight_lines(session.axes[0])[0].get_xdata()[0], 1
+        )
+
+    def test_hover_synchronizes_each_series_by_nearest_frame_value(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 14], [0.0, 1.0], "red", color="red"),
+                SeriesData([0, 4, 10, 18], [2.0, 3.0, 4.0, 5.0], "blue", color="blue"),
+                SeriesData([18, 10], [6.0, 7.0], "green", color="green"),
+            ]
+        )
+        figure = session.figure
+        axis = session.axes[0]
+        figure.canvas.draw()
+        x_pixel, y_pixel = axis.transData.transform((14, 1.0))
+        event = MouseEvent("motion_notify_event", figure.canvas, x_pixel, y_pixel)
+
+        figure.canvas.callbacks.process("motion_notify_event", event)
+
+        highlights = {
+            line.get_color(): line
+            for line in axis.lines
+            if line.get_marker() == "o"
+        }
+        self.assertEqual(highlights["red"].get_xdata()[0], 14)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 10)
+        self.assertEqual(highlights["green"].get_xdata()[0], 18)
+
+    def test_ordinary_clicks_keep_default_cursor_owners_fixed(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 1], [0.0, 1.0], "red", color="red"),
+                SeriesData([0, 1], [10.0, 11.0], "blue", color="blue"),
+            ]
+        )
+        axis = session.axes[0]
+
+        send_mouse_event(session, "button_press_event", axis, 1, 11.0, button=1)
+        send_mouse_event(session, "button_press_event", axis, 1, 1.0, button=1)
+        highlights = cursor_highlights(axis)
+        self.assertEqual(highlights["red"].get_marker(), "s")
+        self.assertEqual(highlights["blue"].get_marker(), "s")
+
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        self.assertEqual(highlights["red"].get_xdata()[0], 0)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 1)
+
+    def test_locked_selected_cursor_freezes_and_unlocked_keyboard_synchronizes(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 14], [0.0, 1.0], "red", color="red"),
+                SeriesData([0, 4, 10], [2.0, 3.0, 4.0], "blue", color="blue"),
+            ]
+        )
+        axis = session.axes[0]
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+
+        send_key_event(session, "end")
+        highlights = cursor_highlights(axis)
+        self.assertEqual(highlights["red"].get_xdata()[0], 0)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 0)
+
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        send_key_event(session, "end")
+        self.assertEqual(highlights["red"].get_xdata()[0], 14)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 10)
+
+    def test_toolbar_navigation_mode_suspends_cursor_interaction(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        manager = session.figure.canvas.manager
+
+        with patch.object(manager, "toolbar", SimpleNamespace(mode="pan/zoom")):
+            send_mouse_event(session, "motion_notify_event", axis, 1, 1.0)
+            send_mouse_event(session, "button_press_event", axis, 1, 1.0, button=1)
+            send_key_event(session, "end")
+
+        self.assertEqual(cursor_highlights(axis)["red"].get_xdata()[0], 0)
+
+    def test_dragging_tooltip_moves_text_without_moving_cursor_anchor(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        session.figure.canvas.draw()
+        tooltip = axis.texts[0]
+        initial_position = tooltip.get_position()
+        bbox = tooltip.get_window_extent(session.figure.canvas.get_renderer())
+        press = MouseEvent(
+            "button_press_event",
+            session.figure.canvas,
+            bbox.x0 + bbox.width / 2,
+            bbox.y0 + bbox.height / 2,
+            button=1,
+        )
+        session.figure.canvas.callbacks.process("button_press_event", press)
+        send_mouse_event(session, "motion_notify_event", axis, 1, 1.0, button=1)
+        send_mouse_event(session, "button_release_event", axis, 1, 1.0, button=1)
+
+        self.assertEqual(cursor_highlights(axis)["red"].get_xdata()[0], 0)
+        self.assertNotEqual(tooltip.get_position(), initial_position)
+
+    def test_cursor_visual_state_and_extra_cursor_deletion_shortcuts(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        default = cursor_highlight_lines(axis)[0]
+        self.assertEqual(default.get_markeredgecolor(), "gold")
+
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        self.assertEqual(default.get_marker(), "s")
+        send_key_event(session, "delete")
+        self.assertEqual(len(cursor_highlight_lines(axis)), 1)
+
+        send_mouse_event(
+            session, "button_press_event", axis, 1, 1.0, button=1, key="shift"
+        )
+        self.assertEqual(len(cursor_highlight_lines(axis)), 2)
+        send_key_event(session, "backspace")
+        self.assertEqual(len(cursor_highlight_lines(axis)), 1)
+
+        send_mouse_event(
+            session, "button_press_event", axis, 1, 1.0, button=1, key="shift"
+        )
+        send_mouse_event(
+            session, "button_press_event", axis, 0, 0.0, button=1, key="shift"
+        )
+        self.assertEqual(len(cursor_highlight_lines(axis)), 3)
+        send_key_event(session, "escape")
+        self.assertEqual(len(cursor_highlight_lines(axis)), 1)
+
+    def test_tooltip_is_lazy_and_uses_axis_frame_formatter(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0.25, 1.25], [0.0, 1.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        tooltip = axis.texts[0]
+        axis.xaxis.set_major_formatter(
+            FuncFormatter(lambda value, _position: f"F{value:.2f}")
+        )
+
+        self.assertFalse(tooltip.get_visible())
+        send_mouse_event(session, "motion_notify_event", axis, 1.25, 1.0)
+
+        self.assertTrue(tooltip.get_visible())
+        self.assertIn("Frame: F1.25", tooltip.get_text())
+
+    def test_vertical_cursor_always_spans_axes_height_after_ylim_changes(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        vertical = next(line for line in axis.lines if line.get_linestyle() == "--")
+
+        np.testing.assert_array_equal(vertical.get_ydata(), [0, 1])
+        axis.set_ylim(-100, 100)
+        session.figure.canvas.draw()
+        np.testing.assert_array_equal(vertical.get_ydata(), [0, 1])
+
+    def test_plot_session_cursor_management_disconnect_and_close_are_idempotent(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        send_mouse_event(
+            session, "button_press_event", axis, 1, 1.0, button=1, key="shift"
+        )
+        self.assertTrue(session.remove_selected_cursor())
+        self.assertEqual(len(cursor_highlight_lines(axis)), 1)
+
+        for frame, value in ((0, 0.0), (1, 1.0)):
+            send_mouse_event(
+                session,
+                "button_press_event",
+                axis,
+                frame,
+                value,
+                button=1,
+                key="shift",
+            )
+        self.assertEqual(session.clear_extra_cursors(), 2)
+
+        session.disconnect()
+        session.disconnect()
+        send_mouse_event(session, "motion_notify_event", axis, 1, 1.0)
+        self.assertEqual(cursor_highlight_lines(axis)[0].get_xdata()[0], 0)
+
+        figure_number = session.figure.number
+        session.close()
+        session.close()
+        self.assertNotIn(figure_number, plt.get_fignums())
+
+        close_event_session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "close-event", color="red")]
+        )
+        close_axis = close_event_session.axes[0]
+        close_event_session.figure.canvas.callbacks.process(
+            "close_event", CloseEvent("close_event", close_event_session.figure.canvas)
+        )
+        send_mouse_event(
+            close_event_session, "motion_notify_event", close_axis, 1, 1.0
+        )
+        self.assertEqual(cursor_highlight_lines(close_axis)[0].get_xdata()[0], 0)
+        close_event_session.close()
+
+    def test_dispatch_and_transform_cache_scale_per_figure(self):
+        from interactive_plotting import create_interactive_plot, make_demo_series
+
+        single = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+        )
+        multi = create_interactive_plot(make_demo_series(seed=9))
+        event_names = (
+            "motion_notify_event",
+            "button_press_event",
+            "button_release_event",
+            "key_press_event",
+            "draw_event",
+            "close_event",
+        )
+
+        def callback_counts(session):
+            callbacks = session.figure.canvas.callbacks.callbacks
+            return {name: len(callbacks.get(name, {})) for name in event_names}
+
+        self.assertEqual(callback_counts(single), callback_counts(multi))
+
+        axis = single.axes[0]
+        original_transform = axis.transData.transform
+        with patch.object(
+            axis.transData, "transform", wraps=original_transform
+        ) as transform:
+            axis.set_xlim(-10, 10)
+            self.assertEqual(transform.call_count, 0)
+
+            x_pixel, y_pixel = original_transform((1, 1.0))
+            motion = MouseEvent(
+                "motion_notify_event", single.figure.canvas, x_pixel, y_pixel
+            )
+            single.figure.canvas.callbacks.process("motion_notify_event", motion)
+            self.assertGreater(transform.call_count, 0)
+            calls_after_hover = transform.call_count
+
+            single.figure.canvas.callbacks.process(
+                "draw_event", SimpleNamespace(canvas=single.figure.canvas)
+            )
+            self.assertEqual(transform.call_count, calls_after_hover)
+
+            single.figure.set_size_inches(8, 6)
+            single.figure.canvas.callbacks.process(
+                "draw_event", SimpleNamespace(canvas=single.figure.canvas)
+            )
+            self.assertEqual(transform.call_count, calls_after_hover)
+            resized_x, resized_y = original_transform((0, 0.0))
+            resized_motion = MouseEvent(
+                "motion_notify_event",
+                single.figure.canvas,
+                resized_x,
+                resized_y,
+            )
+            single.figure.canvas.callbacks.process(
+                "motion_notify_event", resized_motion
+            )
+            self.assertGreater(transform.call_count, calls_after_hover)
 
 
 if __name__ == "__main__":
