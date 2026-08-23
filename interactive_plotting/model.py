@@ -55,9 +55,17 @@ class SeriesData:
             raise ValueError(
                 f"Series '{self.label}' must contain at least one valid value"
             )
-        if len(self.panel) != 2 or any(
-            not isinstance(position, int) or position < 0 for position in self.panel
-        ):
+        panel_is_valid = (
+            isinstance(self.panel, tuple)
+            and len(self.panel) == 2
+            and all(
+                isinstance(position, int)
+                and not isinstance(position, bool)
+                and position >= 0
+                for position in self.panel
+            )
+        )
+        if not panel_is_valid:
             raise ValueError(
                 f"Series '{self.label}' panel must contain two non-negative integers"
             )

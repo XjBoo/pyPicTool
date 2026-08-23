@@ -181,16 +181,24 @@ class DataCursor:
             candidate_positions.append(insertion - 1)
         if insertion < frames.size:
             candidate_positions.append(insertion)
+
+        target_number = (
+            target_frame.item()
+            if isinstance(target_frame, np.generic)
+            else target_frame
+        )
+
+        def distance_and_index(original_index: int) -> tuple[float, int]:
+            candidate = self.series_list[series_idx].frames[original_index]
+            candidate_number = (
+                candidate.item() if isinstance(candidate, np.generic) else candidate
+            )
+            return abs(candidate_number - target_number), int(original_index)
+
         return int(
             min(
                 (original_indices[position] for position in candidate_positions),
-                key=lambda original_index: (
-                    abs(
-                        self.series_list[series_idx].frames[original_index]
-                        - target_frame
-                    ),
-                    original_index,
-                ),
+                key=distance_and_index,
             )
         )
 
@@ -239,10 +247,15 @@ class DataCursor:
 
         series_idx, local_idx = self._nearest_point_from_px(event.x, event.y)
         target_frame = self.series_list[series_idx].frames[local_idx]
-        need_draw = self._select_cursor(self.cursors[series_idx])
+        selected_cursor = self.cursors[series_idx]
+        need_draw = self._select_cursor(selected_cursor)
 
         for cursor in self.cursors:
-            target_idx = self._nearest_index_for_frame(cursor.series_idx, target_frame)
+            target_idx = (
+                local_idx
+                if cursor is selected_cursor
+                else self._nearest_index_for_frame(cursor.series_idx, target_frame)
+            )
             if not cursor.locked and (
                 cursor.current_index != target_idx or not cursor.tooltip.get_visible()
             ):
@@ -292,12 +305,8 @@ class DataCursor:
         self._select_cursor(cursor)
         cursor.locked = not cursor.locked
         cursor.apply_style(True)
-
-        if cursor.locked:
-            self._update_cursor_visuals(cursor, local_idx)
-            self.fig.canvas.draw_idle()
-        else:
-            self.fig.canvas.draw_idle()
+        self._update_cursor_visuals(cursor, local_idx)
+        self.fig.canvas.draw_idle()
 
     def on_release(self, _event: MouseEvent) -> None:
         self._dragging_cursor = None
@@ -310,9 +319,6 @@ class DataCursor:
         key = getattr(event, "key", "").lower()
         if key in ("delete", "backspace"):
             self.remove_selected_cursor()
-            return
-        if key in ("escape", "esc"):
-            self.clear_extra_cursors()
             return
 
         cursor = self._selected
@@ -342,8 +348,12 @@ class DataCursor:
             for candidate in self.cursors:
                 if candidate.locked:
                     continue
-                target_idx = self._nearest_index_for_frame(
-                    candidate.series_idx, target_frame
+                target_idx = (
+                    selected_idx
+                    if candidate is cursor
+                    else self._nearest_index_for_frame(
+                        candidate.series_idx, target_frame
+                    )
                 )
                 self._update_cursor_visuals(candidate, target_idx)
             self.fig.canvas.draw_idle()
@@ -361,7 +371,7 @@ class DataCursor:
         self.fig.canvas.draw_idle()
         return True
 
-    def clear_extra_cursors(self) -> int:
+    def clear_extra_cursors(self, *, request_draw: bool = True) -> int:
         extras = [cursor for cursor in self.cursors if not cursor.is_default]
         for cursor in extras:
             cursor.vline.remove()
@@ -370,7 +380,7 @@ class DataCursor:
             self.cursors.remove(cursor)
         if self._selected in extras:
             self._select_cursor(self.cursors[0])
-        if extras:
+        if extras and request_draw:
             self.fig.canvas.draw_idle()
         return len(extras)
 
@@ -465,6 +475,9 @@ class FigureDispatcher:
     def on_key(self, event: KeyEvent) -> None:
         if self._toolbar_is_active() or self.dragging_controller is not None:
             return
+        if getattr(event, "key", "").lower() in ("escape", "esc"):
+            self.clear_extra_cursors()
+            return
         if self.active_controller is not None:
             self.active_controller.on_key(event)
 
@@ -481,7 +494,13 @@ class FigureDispatcher:
         return self.active_controller.remove_selected_cursor()
 
     def clear_extra_cursors(self) -> int:
-        return sum(controller.clear_extra_cursors() for controller in self.controllers)
+        removed = sum(
+            controller.clear_extra_cursors(request_draw=False)
+            for controller in self.controllers
+        )
+        if removed:
+            self.figure.canvas.draw_idle()
+        return removed
 
     def disconnect(self) -> None:
         if not self.connected:
@@ -534,51 +553,58 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
     row_count = max(item.panel[0] for item in series_items) + 1
     column_count = max(item.panel[1] for item in series_items) + 1
     figure, axes_grid = plt.subplots(row_count, column_count, squeeze=False)
-    grouped: dict[tuple[int, int], list[SeriesData]] = {}
-    for item in series_items:
-        grouped.setdefault(item.panel, []).append(item)
+    controllers: list[DataCursor] = []
+    axes: list[Axes] = []
+    try:
+        grouped: dict[tuple[int, int], list[SeriesData]] = {}
+        for item in series_items:
+            grouped.setdefault(item.panel, []).append(item)
 
-    controllers = []
-    axes = []
-    for row in range(row_count):
-        for column in range(column_count):
-            ax = axes_grid[row, column]
-            axes.append(ax)
-            panel_series = grouped.get((row, column), [])
-            if not panel_series:
-                ax.set_visible(False)
-                continue
+        for row in range(row_count):
+            for column in range(column_count):
+                ax = axes_grid[row, column]
+                axes.append(ax)
+                panel_series = grouped.get((row, column), [])
+                if not panel_series:
+                    ax.set_visible(False)
+                    continue
 
-            for item in panel_series:
-                line_kwargs = {"alpha": item.line_alpha, "zorder": 1}
-                if item.line_color is not None:
-                    line_kwargs["color"] = item.line_color
-                ax.plot(
-                    item.frames,
-                    item.plotting_values,
-                    label=item.label,
-                    **line_kwargs,
+                for item in panel_series:
+                    line_kwargs = {"alpha": item.line_alpha, "zorder": 1}
+                    if item.line_color is not None:
+                        line_kwargs["color"] = item.line_color
+                    ax.plot(
+                        item.frames,
+                        item.plotting_values,
+                        label=item.label,
+                        **line_kwargs,
+                    )
+                    ax.scatter(
+                        item.frames[item.valid_mask],
+                        item.values[item.valid_mask],
+                        c=item.color,
+                        s=15,
+                        zorder=2,
+                        alpha=0.6,
+                    )
+                controller = DataCursor(ax, panel_series)
+                controllers.append(controller)
+                panel_title = next(
+                    (item.panel_title for item in panel_series if item.panel_title),
+                    None,
                 )
-                ax.scatter(
-                    item.frames[item.valid_mask],
-                    item.values[item.valid_mask],
-                    c=item.color,
-                    s=15,
-                    zorder=2,
-                    alpha=0.6,
-                )
-            controller = DataCursor(ax, panel_series)
-            controllers.append(controller)
-            panel_title = next(
-                (item.panel_title for item in panel_series if item.panel_title), None
-            )
-            if panel_title:
-                ax.set_title(panel_title)
-            ax.set_xlabel("Frame Number")
-            ax.set_ylabel("Value")
-            ax.legend(loc="upper right")
-            ax.grid(True, linestyle="--", alpha=0.6)
+                if panel_title:
+                    ax.set_title(panel_title)
+                ax.set_xlabel("Frame Number")
+                ax.set_ylabel("Value")
+                ax.legend(loc="upper right")
+                ax.grid(True, linestyle="--", alpha=0.6)
 
-    figure.tight_layout()
-    dispatcher = FigureDispatcher(figure, controllers)
-    return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
+        figure.tight_layout()
+        dispatcher = FigureDispatcher(figure, controllers)
+        return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
+    except Exception:
+        for controller in controllers:
+            controller.disconnect()
+        plt.close(figure)
+        raise

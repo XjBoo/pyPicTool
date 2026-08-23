@@ -94,6 +94,19 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(len(session.controllers), 1)
         show.assert_not_called()
 
+    def test_failed_plot_construction_does_not_leak_a_figure(self):
+        from interactive_plotting import create_interactive_plot
+
+        figures_before = tuple(plt.get_fignums())
+        invalid_style = SeriesData(
+            [0, 1], [0.0, 1.0], "invalid-style", color="not-a-color"
+        )
+
+        with self.assertRaises(ValueError):
+            create_interactive_plot([invalid_style])
+
+        self.assertEqual(tuple(plt.get_fignums()), figures_before)
+
     def test_show_demo_builds_six_panels_and_calls_show(self):
         from interactive_plotting import PlotSession, show_demo
 
@@ -122,6 +135,10 @@ class InteractivePlotTests(unittest.TestCase):
             with self.subTest(label=label):
                 with self.assertRaisesRegex(ValueError, label):
                     SeriesData(frames=frames, values=values, label=label)
+        for panel in (None, 1, (0,), ("0", 0), (-1, 0)):
+            with self.subTest(panel=panel):
+                with self.assertRaisesRegex(ValueError, "invalid-panel"):
+                    SeriesData([0], [1.0], "invalid-panel", panel=panel)
         with self.assertRaisesRegex(ValueError, "at least one series"):
             create_interactive_plot([])
 
@@ -178,6 +195,45 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(highlights["blue"].get_xdata()[0], 10)
         self.assertEqual(highlights["green"].get_xdata()[0], 18)
 
+    def test_unsigned_frame_distance_does_not_overflow(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    np.array([5], dtype=np.uint64), [1.0], "target", color="red"
+                ),
+                SeriesData(
+                    np.array([0, 10], dtype=np.uint64),
+                    [2.0, 3.0],
+                    "candidate",
+                    color="blue",
+                ),
+            ]
+        )
+        axis = session.axes[0]
+
+        with np.errstate(over="raise"):
+            send_mouse_event(session, "motion_notify_event", axis, 5, 1.0)
+
+        self.assertEqual(cursor_highlights(axis)["blue"].get_xdata()[0], 0)
+
+    def test_duplicate_frames_preserve_the_explicit_selected_point(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 0, 1], [0.0, 10.0, 20.0], "duplicates", color="red")]
+        )
+        axis = session.axes[0]
+
+        send_mouse_event(session, "motion_notify_event", axis, 0, 10.0)
+        selected = cursor_highlights(axis)["red"]
+        self.assertEqual(selected.get_ydata()[0], 10.0)
+
+        send_key_event(session, "right")
+        self.assertEqual(selected.get_xdata()[0], 1)
+        self.assertEqual(selected.get_ydata()[0], 20.0)
+
     def test_ordinary_clicks_keep_default_cursor_owners_fixed(self):
         from interactive_plotting import create_interactive_plot
 
@@ -196,6 +252,7 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(highlights["blue"].get_marker(), "s")
 
         send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        self.assertEqual(highlights["red"].get_xdata()[0], 0)
         send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
         self.assertEqual(highlights["red"].get_xdata()[0], 0)
         self.assertEqual(highlights["blue"].get_xdata()[0], 1)
@@ -297,6 +354,36 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(len(cursor_highlight_lines(axis)), 3)
         send_key_event(session, "escape")
         self.assertEqual(len(cursor_highlight_lines(axis)), 1)
+
+    def test_escape_clears_extra_cursors_from_every_panel(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1], [0.0, 1.0], "left", panel=(0, 0), color="red"
+                ),
+                SeriesData(
+                    [0, 1], [0.0, 1.0], "right", panel=(0, 1), color="blue"
+                ),
+            ]
+        )
+        left, right = session.axes
+        send_mouse_event(
+            session, "button_press_event", left, 1, 1.0, button=1, key="shift"
+        )
+        send_mouse_event(
+            session, "button_press_event", right, 1, 1.0, button=1, key="shift"
+        )
+        self.assertEqual(
+            [len(cursor_highlight_lines(axis)) for axis in (left, right)], [2, 2]
+        )
+
+        send_key_event(session, "escape")
+
+        self.assertEqual(
+            [len(cursor_highlight_lines(axis)) for axis in (left, right)], [1, 1]
+        )
 
     def test_tooltip_is_lazy_and_uses_axis_frame_formatter(self):
         from interactive_plotting import create_interactive_plot

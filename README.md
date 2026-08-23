@@ -35,7 +35,8 @@ unsupported for now: create a new session when the source data changes.
   least one finite value.
 - Hover synchronizes every unlocked cursor by the selected point's actual
   frame. A series without that exact frame uses its nearest valid frame;
-  equal-distance ties choose the smaller original array index.
+  equal-distance ties choose the smaller original array index. If the selected
+  series contains duplicate frames, its explicitly hit point remains selected.
 
 The normalized arrays are an internal plotting representation, not a promise
 about the future business-data interface.
