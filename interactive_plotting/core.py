@@ -530,6 +530,7 @@ class PendingAxesClick:
     controller: DataCursor
     axis: Axes
     snapshot: DataCursor.StateSnapshot
+    previous_active_controller: DataCursor | None
 
 
 class FigureDispatcher:
@@ -634,8 +635,8 @@ class FigureDispatcher:
                 and pending.axis is event.inaxes
             ):
                 controller.restore_state(pending.snapshot)
+                self.active_controller = pending.previous_active_controller
             self._pending_axes_click = None
-            self.active_controller = controller
             self.layout.toggle(controller.ax)
             return
         self._pending_axes_click = None
@@ -644,6 +645,7 @@ class FigureDispatcher:
                 controller=controller,
                 axis=controller.ax,
                 snapshot=controller.capture_state(),
+                previous_active_controller=self.active_controller,
             )
         self.active_controller = controller
         controller.on_click(event)
@@ -696,6 +698,16 @@ class FigureDispatcher:
             self.figure.canvas.draw_idle()
         return removed
 
+    def toggle_axes_maximized(self, axis: Axes) -> bool:
+        if not self.connected:
+            return False
+        return self.layout.toggle(axis)
+
+    def restore_layout(self) -> bool:
+        if not self.connected:
+            return False
+        return self.layout.restore()
+
     def disconnect(self) -> None:
         if not self.connected:
             return
@@ -746,12 +758,12 @@ class PlotSession:
     def toggle_axes_maximized(self, axis: Axes) -> bool:
         """Toggle one axes between the captured layout and figure-filling mode."""
 
-        return self._dispatcher.layout.toggle(axis)
+        return self._dispatcher.toggle_axes_maximized(axis)
 
     def restore_layout(self) -> bool:
         """Restore the captured axes layout, returning whether it changed."""
 
-        return self._dispatcher.layout.restore()
+        return self._dispatcher.restore_layout()
 
 
 def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:

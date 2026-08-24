@@ -155,6 +155,23 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertGreater(maximized_bounds[3], 0.8)
         session.figure.canvas.draw()
         np.testing.assert_allclose(first.get_position().bounds, maximized_bounds)
+        self.assertTrue(first.get_title())
+        self.assertTrue(first.get_legend().get_visible())
+        data_line = first.lines[0]
+        frame = data_line.get_xdata()[0]
+        value = data_line.get_ydata()[0]
+        send_mouse_event(session, "motion_notify_event", first, frame, value)
+        marker = next(
+            line
+            for line in cursor_highlight_lines(first)
+            if line.get_markeredgecolor() == "gold"
+        )
+        self.assertEqual(marker.get_markeredgecolor(), "gold")
+        self.assertTrue(any(text.get_visible() for text in first.texts))
+        send_mouse_event(
+            session, "button_press_event", first, frame, value, button=1
+        )
+        self.assertEqual(marker.get_marker(), "s")
 
         self.assertFalse(session.toggle_axes_maximized(first))
         self.assertEqual(axes_layout_snapshot(session), original_layout)
@@ -249,9 +266,70 @@ class InteractivePlotTests(unittest.TestCase):
             state_before,
         )
 
+        send_mouse_event(
+            session,
+            "button_press_event",
+            left,
+            1,
+            1.0,
+            button=1,
+            key="shift",
+            dblclick=False,
+        )
+        send_mouse_event(
+            session,
+            "button_press_event",
+            left,
+            1,
+            1.0,
+            button=1,
+            key="shift",
+            dblclick=True,
+        )
+        self.assertFalse(right.get_visible())
+        self.assertEqual(len(cursor_highlight_lines(left)), 1)
+        session.restore_layout()
+
         send_mouse_event(session, "button_press_event", left, 1, 1.0, button=1)
         self.assertEqual(marker.get_xdata()[0], 1)
         self.assertEqual(marker.get_marker(), "s")
+
+    def test_double_click_preserves_the_selected_controller_for_keyboard_input(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1, 2],
+                    [0.0, 1.0, 2.0],
+                    "left",
+                    panel=(0, 0),
+                    color="red",
+                ),
+                SeriesData(
+                    [0, 1, 2],
+                    [0.0, 1.0, 2.0],
+                    "right",
+                    panel=(0, 1),
+                    color="blue",
+                ),
+            ]
+        )
+        left, right = session.axes
+        send_mouse_event(session, "motion_notify_event", right, 0, 0.0)
+        right_marker = cursor_highlights(right)["blue"]
+        self.assertEqual(right_marker.get_markeredgecolor(), "gold")
+
+        send_mouse_event(
+            session, "button_press_event", left, 1, 1.0, button=1, dblclick=False
+        )
+        send_mouse_event(
+            session, "button_press_event", left, 1, 1.0, button=1, dblclick=True
+        )
+        send_key_event(session, "right")
+
+        self.assertEqual(right_marker.get_xdata()[0], 1)
+        self.assertEqual(right_marker.get_markeredgecolor(), "gold")
 
     def test_escape_restores_layout_before_clearing_extra_cursors(self):
         from interactive_plotting import create_interactive_plot
@@ -783,6 +861,8 @@ class InteractivePlotTests(unittest.TestCase):
             session, "button_press_event", left, 0, 0.0, button=1, dblclick=True
         )
         self.assertTrue(right.get_visible())
+        self.assertFalse(session.toggle_axes_maximized(left))
+        self.assertEqual(axes_layout_snapshot(session), original_layout)
 
         close_event_session = build_two_panel_session()
         close_original = axes_layout_snapshot(close_event_session)
