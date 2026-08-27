@@ -469,6 +469,12 @@ class AxesLayoutManager:
     def __init__(self, figure: Figure, axes: Sequence[Axes]) -> None:
         self.figure = figure
         self.axes = tuple(axes)
+        self._states: dict[Axes, AxesLayoutState] = {}
+        self._maximized_position = (0.0, 0.0, 1.0, 1.0)
+        self._capture_layout()
+        self.maximized_axes: Axes | None = None
+
+    def _capture_layout(self) -> None:
         self._states = {
             axis: AxesLayoutState(
                 visible=axis.get_visible(),
@@ -492,7 +498,6 @@ class AxesLayoutManager:
             for state in visible_states
         )
         self._maximized_position = (left, bottom, right - left, top - bottom)
-        self.maximized_axes: Axes | None = None
 
     def toggle(self, axis: Axes) -> bool:
         if axis not in self._states:
@@ -502,6 +507,8 @@ class AxesLayoutManager:
             return False
         if self.maximized_axes is not None:
             self.restore(request_draw=False)
+        else:
+            self._capture_layout()
         for candidate in self.axes:
             candidate.set_visible(candidate is axis)
             candidate.set_in_layout(False)

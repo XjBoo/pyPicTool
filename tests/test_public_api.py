@@ -186,6 +186,67 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertTrue(session.restore_layout())
         self.assertEqual(axes_layout_snapshot(session), original_layout)
 
+    def test_layout_restores_after_external_resize_and_tight_layout_repeatedly(self):
+        from interactive_plotting import create_interactive_plot, make_demo_series
+
+        session = create_interactive_plot(make_demo_series(seed=7))
+        session.figure.set_size_inches(12.0, 10.0, forward=True)
+        session.figure.tight_layout()
+        session.figure.canvas.draw()
+        initial_layout = axes_layout_snapshot(session)
+
+        for cycle in range(3):
+            self.assertTrue(session.toggle_axes_maximized(session.axes[0]))
+            session.figure.canvas.draw()
+            self.assertFalse(session.toggle_axes_maximized(session.axes[0]))
+            session.figure.canvas.draw()
+
+            restored_layout = axes_layout_snapshot(session)
+            for axis_index, (initial, restored) in enumerate(
+                zip(initial_layout, restored_layout, strict=True)
+            ):
+                with self.subTest(cycle=cycle, axis=axis_index):
+                    self.assertEqual(restored[:2], initial[:2])
+                    np.testing.assert_allclose(
+                        restored[2], initial[2], rtol=0, atol=1e-12
+                    )
+                    np.testing.assert_allclose(
+                        restored[3], initial[3], rtol=0, atol=1e-12
+                    )
+
+    def test_single_axes_layout_restores_after_external_layout_change(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "single", color="red")]
+        )
+        session.figure.set_size_inches(12.0, 10.0, forward=True)
+        session.figure.tight_layout()
+        session.figure.canvas.draw()
+        initial_layout = axes_layout_snapshot(session)
+
+        for cycle in range(3):
+            self.assertTrue(session.toggle_axes_maximized(session.axes[0]))
+            session.figure.canvas.draw()
+            self.assertFalse(session.toggle_axes_maximized(session.axes[0]))
+            session.figure.canvas.draw()
+
+            restored_layout = axes_layout_snapshot(session)
+            with self.subTest(cycle=cycle):
+                self.assertEqual(restored_layout[0][:2], initial_layout[0][:2])
+                np.testing.assert_allclose(
+                    restored_layout[0][2],
+                    initial_layout[0][2],
+                    rtol=0,
+                    atol=1e-12,
+                )
+                np.testing.assert_allclose(
+                    restored_layout[0][3],
+                    initial_layout[0][3],
+                    rtol=0,
+                    atol=1e-12,
+                )
+
     def test_double_click_maximizes_without_applying_the_first_single_click(self):
         from interactive_plotting import create_interactive_plot
 
