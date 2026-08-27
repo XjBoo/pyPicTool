@@ -167,11 +167,15 @@ class InteractivePlotTests(unittest.TestCase):
             if line.get_markeredgecolor() == "gold"
         )
         self.assertEqual(marker.get_markeredgecolor(), "gold")
-        self.assertTrue(any(text.get_visible() for text in first.texts))
+        self.assertFalse(any(text.get_visible() for text in first.texts))
         send_mouse_event(
             session, "button_press_event", first, frame, value, button=1
         )
         self.assertEqual(marker.get_marker(), "s")
+        self.assertEqual(
+            sum(text.get_visible() for axis in session.axes for text in axis.texts),
+            1,
+        )
 
         self.assertFalse(session.toggle_axes_maximized(first))
         self.assertEqual(axes_layout_snapshot(session), original_layout)
@@ -355,6 +359,41 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(marker.get_xdata()[0], 1)
         self.assertEqual(marker.get_marker(), "s")
 
+    def test_double_click_restores_the_previous_figure_tooltip(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1], [0.0, 1.0], "left", panel=(0, 0), color="red"
+                ),
+                SeriesData(
+                    [0, 1], [10.0, 11.0], "right", panel=(0, 1), color="blue"
+                ),
+            ]
+        )
+        left, right = session.axes
+        send_mouse_event(
+            session, "button_press_event", right, 0, 10.0, button=1
+        )
+        self.assertTrue(right.texts[0].get_visible())
+
+        send_mouse_event(
+            session, "button_press_event", left, 0, 0.0, button=1, dblclick=False
+        )
+        send_mouse_event(
+            session, "button_press_event", left, 0, 0.0, button=1, dblclick=True
+        )
+        session.restore_layout()
+
+        visible_tooltips = [
+            tooltip
+            for axis in session.axes
+            for tooltip in axis.texts
+            if tooltip.get_visible()
+        ]
+        self.assertEqual(visible_tooltips, [right.texts[0]])
+
     def test_double_click_preserves_the_selected_controller_for_keyboard_input(self):
         from interactive_plotting import create_interactive_plot
 
@@ -488,6 +527,7 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertTrue(right.get_visible())
 
         send_mouse_event(session, "motion_notify_event", left, 0, 0.0)
+        send_mouse_event(session, "button_press_event", left, 0, 0.0, button=1)
         canvas.draw()
         tooltip = left.texts[0]
         tooltip_box = tooltip.get_window_extent(canvas.get_renderer())
@@ -605,6 +645,92 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(highlights["blue"].get_xdata()[0], 10)
         self.assertEqual(highlights["green"].get_xdata()[0], 18)
 
+    def test_hover_keeps_tooltips_hidden_and_click_shows_only_the_hit_point(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 1], [0.0, 1.0], "low", color="red"),
+                SeriesData([0, 1], [10.0, 11.0], "high", color="blue"),
+            ]
+        )
+        axis = session.axes[0]
+        session.figure.canvas.draw()
+        self.assertFalse(any(tooltip.get_visible() for tooltip in axis.texts))
+
+        send_mouse_event(session, "motion_notify_event", axis, 1, 1.0)
+        self.assertFalse(any(tooltip.get_visible() for tooltip in axis.texts))
+
+        send_mouse_event(
+            session, "button_press_event", axis, 1, 1.0, button=1
+        )
+        visible_tooltips = [
+            tooltip for tooltip in axis.texts if tooltip.get_visible()
+        ]
+        self.assertEqual(len(visible_tooltips), 1)
+        self.assertEqual(visible_tooltips[0].xy, (1, 1.0))
+        self.assertEqual(
+            visible_tooltips[0].get_bbox_patch().get_facecolor()[:3],
+            (1.0, 1.0, 1.0),
+        )
+
+    def test_each_click_replaces_the_only_visible_tooltip_in_the_figure(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1], [0.0, 1.0], "left-low", panel=(0, 0), color="red"
+                ),
+                SeriesData(
+                    [0, 1],
+                    [10.0, 11.0],
+                    "left-high",
+                    panel=(0, 0),
+                    color="blue",
+                ),
+                SeriesData(
+                    [0, 1],
+                    [20.0, 21.0],
+                    "right",
+                    panel=(0, 1),
+                    color="green",
+                ),
+            ]
+        )
+        left, right = session.axes
+
+        def visible_tooltips():
+            return [
+                tooltip
+                for axis in session.axes
+                for tooltip in axis.texts
+                if tooltip.get_visible()
+            ]
+
+        send_mouse_event(
+            session, "button_press_event", left, 0, 0.0, button=1
+        )
+        first = visible_tooltips()
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0].xy, (0, 0.0))
+
+        send_mouse_event(
+            session, "button_press_event", left, 0, 10.0, button=1
+        )
+        second = visible_tooltips()
+        self.assertEqual(len(second), 1)
+        self.assertIsNot(second[0], first[0])
+        self.assertEqual(second[0].xy, (0, 10.0))
+
+        send_mouse_event(
+            session, "button_press_event", right, 0, 20.0, button=1
+        )
+        third = visible_tooltips()
+        self.assertEqual(len(third), 1)
+        self.assertIsNot(third[0], second[0])
+        self.assertEqual(third[0].xy, (0, 20.0))
+
     def test_unsigned_frame_distance_does_not_overflow(self):
         from interactive_plotting import create_interactive_plot
 
@@ -708,6 +834,67 @@ class InteractivePlotTests(unittest.TestCase):
 
         self.assertEqual(cursor_highlights(axis)["red"].get_xdata()[0], 0)
 
+    def test_non_click_interactions_never_create_another_visible_tooltip(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1, 2],
+                    [0.0, 1.0, 2.0],
+                    "left",
+                    panel=(0, 0),
+                    color="red",
+                ),
+                SeriesData(
+                    [0, 1, 2],
+                    [10.0, 11.0, 12.0],
+                    "right",
+                    panel=(0, 1),
+                    color="blue",
+                ),
+            ]
+        )
+        left, right = session.axes
+
+        def visible_tooltips():
+            return [
+                tooltip
+                for axis in session.axes
+                for tooltip in axis.texts
+                if tooltip.get_visible()
+            ]
+
+        session.figure.canvas.draw()
+        self.assertEqual(visible_tooltips(), [])
+        send_mouse_event(session, "motion_notify_event", left, 0, 0.0)
+        self.assertEqual(visible_tooltips(), [])
+
+        send_mouse_event(
+            session, "button_press_event", left, 0, 0.0, button=1
+        )
+        send_mouse_event(
+            session, "button_press_event", left, 1, 1.0, button=1
+        )
+        send_key_event(session, "right")
+        self.assertEqual(visible_tooltips(), [left.texts[0]])
+
+        session.toggle_axes_maximized(left)
+        session.figure.canvas.draw()
+        session.restore_layout()
+        session.figure.canvas.draw()
+        self.assertEqual(visible_tooltips(), [left.texts[0]])
+
+        manager = session.figure.canvas.manager
+        with patch.object(manager, "toolbar", SimpleNamespace(mode="pan/zoom")):
+            send_mouse_event(session, "motion_notify_event", right, 0, 10.0)
+        self.assertEqual(visible_tooltips(), [left.texts[0]])
+
+        send_mouse_event(
+            session, "button_press_event", right, 0, 10.0, button=3
+        )
+        self.assertEqual(visible_tooltips(), [left.texts[0]])
+
     def test_dragging_tooltip_moves_text_without_moving_cursor_anchor(self):
         from interactive_plotting import create_interactive_plot
 
@@ -716,6 +903,7 @@ class InteractivePlotTests(unittest.TestCase):
         )
         axis = session.axes[0]
         send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
         session.figure.canvas.draw()
         tooltip = axis.texts[0]
         initial_position = tooltip.get_position()
@@ -797,7 +985,7 @@ class InteractivePlotTests(unittest.TestCase):
             [len(cursor_highlight_lines(axis)) for axis in (left, right)], [1, 1]
         )
 
-    def test_tooltip_is_lazy_and_uses_axis_frame_formatter(self):
+    def test_clicked_tooltip_uses_axis_formatters_without_a_series_label(self):
         from interactive_plotting import create_interactive_plot
 
         session = create_interactive_plot(
@@ -808,12 +996,20 @@ class InteractivePlotTests(unittest.TestCase):
         axis.xaxis.set_major_formatter(
             FuncFormatter(lambda value, _position: f"F{value:.2f}")
         )
+        axis.yaxis.set_major_formatter(
+            FuncFormatter(lambda value, _position: f"V{value:.2f}")
+        )
 
         self.assertFalse(tooltip.get_visible())
-        send_mouse_event(session, "motion_notify_event", axis, 1.25, 1.0)
+        send_mouse_event(session, "motion_notify_event", axis, 0.25, 0.0)
+        self.assertFalse(tooltip.get_visible())
+        send_mouse_event(
+            session, "button_press_event", axis, 0.25, 0.0, button=1
+        )
 
         self.assertTrue(tooltip.get_visible())
-        self.assertIn("Frame: F1.25", tooltip.get_text())
+        self.assertEqual(tooltip.get_text(), "Frame: F0.25\nValue: V0.00")
+        self.assertNotIn("sample", tooltip.get_text())
 
     def test_cursors_use_only_markers_and_tooltips(self):
         from interactive_plotting import create_interactive_plot

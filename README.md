@@ -46,8 +46,10 @@ about the future business-data interface.
 
 - Hover selects the nearest point in screen space and moves all unlocked
   cursors by frame value.
-- Left click selects that series' permanent default cursor and toggles its
-  locked state. Locked cursors ignore mouse and keyboard movement.
+- Left click selects that series' permanent default cursor, toggles its locked
+  state, and shows the figure's only tooltip at the clicked point. The next
+  data-point click replaces that tooltip, including across subplots.
+  Locked cursors ignore mouse and keyboard movement.
 - Shift+left click adds a locked extra cursor. Delete/Backspace removes the
   selected extra cursor. Default cursors cannot be deleted.
 - Left/Right and Home/End move only an explicitly selected, unlocked cursor,
@@ -63,10 +65,11 @@ about the future business-data interface.
 - Drag anywhere on a legend box or its labels to reposition the whole legend.
   Legend and tooltip gestures take priority over subplot maximization.
 
-Tooltips first appear on hover or selection and use the axis formatter for
-frame text. Cursors use only point markers and tooltips. A gold marker edge
-identifies the selected cursor, while a square marker identifies a locked
-cursor.
+Tooltips stay hidden during initialization and hover. A data-point left click
+shows one white tooltip containing only `Frame` and `Value`, both formatted by
+the corresponding axis formatter. Cursors use only point markers and tooltips.
+A gold marker edge identifies the selected cursor, while a square marker
+identifies a locked cursor.
 
 ## Demo, tests, and performance
 

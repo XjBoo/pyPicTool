@@ -53,7 +53,7 @@ class DataCursor:
                 xy=(0, 0),
                 xytext=(20, 20),
                 textcoords="offset points",
-                bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.8),
+                bbox=dict(boxstyle="round,pad=0.5", fc="white", alpha=0.8),
                 arrowprops=dict(arrowstyle="->"),
                 visible=False,
             )
@@ -213,7 +213,7 @@ class DataCursor:
         )
 
     def _update_cursor_visuals(
-        self, cursor: Cursor, local_idx: int, show_tooltip: bool = True
+        self, cursor: Cursor, local_idx: int, show_tooltip: bool = False
     ) -> None:
         series = self.series_list[cursor.series_idx]
         frames = series.frames
@@ -226,11 +226,9 @@ class DataCursor:
         x_value, y_value = frames[local_idx], values[local_idx]
         cursor.highlight.set_data([x_value], [y_value])
         cursor.tooltip.xy = (x_value, y_value)
-        label = series.label
         frame_text = self.ax.xaxis.get_major_formatter().format_data_short(x_value)
-        cursor.tooltip.set_text(
-            f"{label}\nFrame: {frame_text}\nValue: {y_value:.4f}"
-        )
+        value_text = self.ax.yaxis.get_major_formatter().format_data_short(y_value)
+        cursor.tooltip.set_text(f"Frame: {frame_text}\nValue: {value_text}")
         if show_tooltip:
             cursor.tooltip.set_visible(True)
 
@@ -265,9 +263,7 @@ class DataCursor:
                 if cursor is selected_cursor
                 else self._nearest_index_for_frame(cursor.series_idx, target_frame)
             )
-            if not cursor.locked and (
-                cursor.current_index != target_idx or not cursor.tooltip.get_visible()
-            ):
+            if not cursor.locked and cursor.current_index != target_idx:
                 self._update_cursor_visuals(cursor, target_idx)
                 need_draw = True
         if need_draw:
@@ -304,7 +300,7 @@ class DataCursor:
             cursor.locked = True
             self.cursors.append(cursor)
             self._select_cursor(cursor)
-            self._update_cursor_visuals(cursor, local_idx)
+            self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
             cursor.apply_style(True)
             self.fig.canvas.draw_idle()
             return
@@ -314,7 +310,7 @@ class DataCursor:
         self._select_cursor(cursor)
         cursor.locked = not cursor.locked
         cursor.apply_style(True)
-        self._update_cursor_visuals(cursor, local_idx)
+        self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
         self.fig.canvas.draw_idle()
 
     def on_release(self, _event: MouseEvent) -> None:
@@ -397,6 +393,10 @@ class DataCursor:
 
     def contains_tooltip(self, event: MouseEvent) -> bool:
         return any(cursor.tooltip.contains(event)[0] for cursor in self.cursors)
+
+    def hide_tooltips(self) -> None:
+        for cursor in self.cursors:
+            cursor.tooltip.set_visible(False)
 
     def capture_state(self) -> StateSnapshot:
         return DataCursor.StateSnapshot(
@@ -536,7 +536,7 @@ class AxesLayoutManager:
 class PendingAxesClick:
     controller: DataCursor
     axis: Axes
-    snapshot: DataCursor.StateSnapshot
+    snapshots: tuple[tuple[DataCursor, DataCursor.StateSnapshot], ...]
     previous_active_controller: DataCursor | None
 
 
@@ -587,6 +587,10 @@ class FigureDispatcher:
             ),
             None,
         )
+
+    def _hide_all_tooltips(self) -> None:
+        for controller in self.controllers:
+            controller.hide_tooltips()
 
     def on_motion(self, event: MouseEvent) -> None:
         if self._toolbar_is_active():
@@ -641,7 +645,8 @@ class FigureDispatcher:
                 and pending.controller is controller
                 and pending.axis is event.inaxes
             ):
-                controller.restore_state(pending.snapshot)
+                for snapshot_controller, snapshot in pending.snapshots:
+                    snapshot_controller.restore_state(snapshot)
                 self.active_controller = pending.previous_active_controller
             self._pending_axes_click = None
             self.layout.toggle(controller.ax)
@@ -651,9 +656,13 @@ class FigureDispatcher:
             self._pending_axes_click = PendingAxesClick(
                 controller=controller,
                 axis=controller.ax,
-                snapshot=controller.capture_state(),
+                snapshots=tuple(
+                    (candidate, candidate.capture_state())
+                    for candidate in self.controllers
+                ),
                 previous_active_controller=self.active_controller,
             )
+            self._hide_all_tooltips()
         self.active_controller = controller
         controller.on_click(event)
         if controller.is_dragging:
