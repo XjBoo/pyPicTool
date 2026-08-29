@@ -72,6 +72,15 @@ move it away from that clicked point. Cursors use only point markers and
 tooltips. A gold marker edge identifies the selected cursor, while a square
 marker identifies a locked cursor.
 
+## GUI stack
+
+Interactive windows run Matplotlib's QtAgg backend on PySide6, the only Qt
+binding declared and installed. This combination was selected after a
+backend-comparison prototype (silx and plotpy were rejected because their
+application-layer abstractions constrain the custom tooltip, subplot-focus,
+and draggable-legend interactions). Automated checks stay on the Agg backend
+and never require Qt.
+
 ## Demo, tests, and performance
 
 For manual testing in VS Code, run `interactive_plot.py` directly.
