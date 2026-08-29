@@ -67,9 +67,10 @@ about the future business-data interface.
 
 Tooltips stay hidden during initialization and hover. A data-point left click
 shows one white tooltip containing only `Frame` and `Value`, both formatted by
-the corresponding axis formatter. Cursors use only point markers and tooltips.
-A gold marker edge identifies the selected cursor, while a square marker
-identifies a locked cursor.
+the corresponding axis formatter. Hover and keyboard cursor movement do not
+move it away from that clicked point. Cursors use only point markers and
+tooltips. A gold marker edge identifies the selected cursor, while a square
+marker identifies a locked cursor.
 
 ## Demo, tests, and performance
 

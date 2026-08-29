@@ -731,6 +731,36 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertIsNot(third[0], second[0])
         self.assertEqual(third[0].xy, (0, 20.0))
 
+    def test_clicking_empty_axes_space_does_not_select_or_show_a_tooltip(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 10], [0.0, 10.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        marker = cursor_highlights(axis)["red"]
+        initial_state = (
+            tuple(marker.get_xdata()),
+            tuple(marker.get_ydata()),
+            marker.get_marker(),
+            marker.get_markeredgecolor(),
+        )
+
+        send_mouse_event(
+            session, "button_press_event", axis, 5, 10.0, button=1
+        )
+
+        self.assertFalse(any(tooltip.get_visible() for tooltip in axis.texts))
+        self.assertEqual(
+            (
+                tuple(marker.get_xdata()),
+                tuple(marker.get_ydata()),
+                marker.get_marker(),
+                marker.get_markeredgecolor(),
+            ),
+            initial_state,
+        )
+
     def test_unsigned_frame_distance_does_not_overflow(self):
         from interactive_plotting import create_interactive_plot
 
@@ -876,7 +906,17 @@ class InteractivePlotTests(unittest.TestCase):
         send_mouse_event(
             session, "button_press_event", left, 1, 1.0, button=1
         )
-        send_key_event(session, "right")
+        clicked_tooltip_state = (left.texts[0].xy, left.texts[0].get_text())
+        send_mouse_event(session, "motion_notify_event", left, 2, 2.0)
+        self.assertEqual(
+            (left.texts[0].xy, left.texts[0].get_text()),
+            clicked_tooltip_state,
+        )
+        send_key_event(session, "home")
+        self.assertEqual(
+            (left.texts[0].xy, left.texts[0].get_text()),
+            clicked_tooltip_state,
+        )
         self.assertEqual(visible_tooltips(), [left.texts[0]])
 
         session.toggle_axes_maximized(left)

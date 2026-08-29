@@ -26,6 +26,8 @@ class DataCursor:
     4. 每个系列有一个默认游标，Shift+左键可新增锁定游标。
     """
 
+    _CLICK_HIT_RADIUS_PIXELS = 10.0
+
     class Cursor:
         """单个游标实例（高亮点 + tooltip）。"""
 
@@ -70,6 +72,7 @@ class DataCursor:
         current_index: int
         locked: bool
         tooltip_visible: bool
+        tooltip_anchor: tuple[float, float]
         tooltip_position: tuple[float, float]
         tooltip_text: str
 
@@ -165,7 +168,9 @@ class DataCursor:
         self._disp_cache_valid = True
         self._disp_cache_signature = signature
 
-    def _nearest_point_from_px(self, x_px: float, y_px: float) -> tuple[int, int]:
+    def _nearest_point_from_px(
+        self, x_px: float, y_px: float
+    ) -> tuple[int, int, float]:
         self._ensure_disp_cache()
         best_d2 = None
         best_series_idx = None
@@ -180,7 +185,7 @@ class DataCursor:
                 best_d2 = min_distance_squared
                 best_series_idx = series_idx
                 best_local_idx = int(self._disp_indices_list[series_idx][min_idx])
-        return best_series_idx, best_local_idx
+        return best_series_idx, best_local_idx, float(best_d2)
 
     def _nearest_index_for_frame(self, series_idx: int, target_frame: float) -> int:
         frames = self._sync_frames_list[series_idx]
@@ -225,12 +230,14 @@ class DataCursor:
         cursor.current_index = local_idx
         x_value, y_value = frames[local_idx], values[local_idx]
         cursor.highlight.set_data([x_value], [y_value])
+        if not show_tooltip:
+            return
+
         cursor.tooltip.xy = (x_value, y_value)
         frame_text = self.ax.xaxis.get_major_formatter().format_data_short(x_value)
         value_text = self.ax.yaxis.get_major_formatter().format_data_short(y_value)
         cursor.tooltip.set_text(f"Frame: {frame_text}\nValue: {value_text}")
-        if show_tooltip:
-            cursor.tooltip.set_visible(True)
+        cursor.tooltip.set_visible(True)
 
     def on_hover(self, event: MouseEvent) -> None:
         if self._dragging_cursor is not None:
@@ -252,7 +259,9 @@ class DataCursor:
         if event.x is None or event.y is None:
             return
 
-        series_idx, local_idx = self._nearest_point_from_px(event.x, event.y)
+        series_idx, local_idx, _distance_squared = self._nearest_point_from_px(
+            event.x, event.y
+        )
         target_frame = self.series_list[series_idx].frames[local_idx]
         selected_cursor = self.cursors[series_idx]
         need_draw = self._select_cursor(selected_cursor)
@@ -269,7 +278,7 @@ class DataCursor:
         if need_draw:
             self.fig.canvas.draw_idle()
 
-    def on_click(self, event: MouseEvent) -> None:
+    def on_click(self, event: MouseEvent) -> Cursor | None:
         if getattr(event, "button", None) == 1:
             for cursor in self.cursors:
                 contains, _ = cursor.tooltip.contains(event)
@@ -284,12 +293,17 @@ class DataCursor:
             return
         if getattr(event, "button", None) != 1:
             return
+        if event.x is None or event.y is None:
+            return
+
+        series_idx, local_idx, distance_squared = self._nearest_point_from_px(
+            event.x, event.y
+        )
+        if distance_squared > self._CLICK_HIT_RADIUS_PIXELS**2:
+            return
 
         is_shift = "shift" in str(getattr(event, "key", "")).lower()
         if is_shift:
-            if event.x is None or event.y is None:
-                return
-            series_idx, local_idx = self._nearest_point_from_px(event.x, event.y)
             series = self.series_list[series_idx]
             x_value = series.frames[local_idx]
             y_value = series.values[local_idx]
@@ -302,16 +316,14 @@ class DataCursor:
             self._select_cursor(cursor)
             self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
             cursor.apply_style(True)
-            self.fig.canvas.draw_idle()
-            return
+            return cursor
 
-        series_idx, local_idx = self._nearest_point_from_px(event.x, event.y)
         cursor = self.cursors[series_idx]
         self._select_cursor(cursor)
         cursor.locked = not cursor.locked
         cursor.apply_style(True)
         self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
-        self.fig.canvas.draw_idle()
+        return cursor
 
     def on_release(self, _event: MouseEvent) -> None:
         self._dragging_cursor = None
@@ -394,9 +406,10 @@ class DataCursor:
     def contains_tooltip(self, event: MouseEvent) -> bool:
         return any(cursor.tooltip.contains(event)[0] for cursor in self.cursors)
 
-    def hide_tooltips(self) -> None:
+    def hide_tooltips(self, except_cursor: Cursor | None = None) -> None:
         for cursor in self.cursors:
-            cursor.tooltip.set_visible(False)
+            if cursor is not except_cursor:
+                cursor.tooltip.set_visible(False)
 
     def capture_state(self) -> StateSnapshot:
         return DataCursor.StateSnapshot(
@@ -406,6 +419,7 @@ class DataCursor:
                     current_index=cursor.current_index,
                     locked=cursor.locked,
                     tooltip_visible=cursor.tooltip.get_visible(),
+                    tooltip_anchor=tuple(cursor.tooltip.xy),
                     tooltip_position=cursor.tooltip.get_position(),
                     tooltip_text=cursor.tooltip.get_text(),
                 )
@@ -429,6 +443,7 @@ class DataCursor:
             self._update_cursor_visuals(
                 cursor, state.current_index, show_tooltip=False
             )
+            cursor.tooltip.xy = state.tooltip_anchor
             cursor.tooltip.set_visible(state.tooltip_visible)
             cursor.tooltip.set_position(state.tooltip_position)
             cursor.tooltip.set_text(state.tooltip_text)
@@ -588,9 +603,11 @@ class FigureDispatcher:
             None,
         )
 
-    def _hide_all_tooltips(self) -> None:
+    def _hide_all_tooltips(
+        self, except_cursor: DataCursor.Cursor | None = None
+    ) -> None:
         for controller in self.controllers:
-            controller.hide_tooltips()
+            controller.hide_tooltips(except_cursor)
 
     def on_motion(self, event: MouseEvent) -> None:
         if self._toolbar_is_active():
@@ -662,9 +679,11 @@ class FigureDispatcher:
                 ),
                 previous_active_controller=self.active_controller,
             )
-            self._hide_all_tooltips()
         self.active_controller = controller
-        controller.on_click(event)
+        clicked_cursor = controller.on_click(event)
+        if clicked_cursor is not None:
+            self._hide_all_tooltips(except_cursor=clicked_cursor)
+            self.figure.canvas.draw_idle()
         if controller.is_dragging:
             self.dragging_controller = controller
 
