@@ -14,6 +14,46 @@ from matplotlib.legend import Legend
 
 from .model import SeriesData
 
+# Keyboard cursor navigation owns keys that Matplotlib's default keymap binds
+# to navigation-toolbar view history (back/forward/home). Sessions claim the
+# cleanup on creation and release it on disconnect; the last release restores
+# the exact default bindings.
+_VIEW_NAVIGATION_KEY_REMOVALS: dict[str, tuple[str, ...]] = {
+    "keymap.back": ("left", "backspace"),
+    "keymap.forward": ("right",),
+    "keymap.home": ("home",),
+}
+_view_navigation_key_claims = 0
+_view_navigation_key_snapshots: dict[str, list[str]] | None = None
+
+
+def _suppress_view_navigation_keys() -> None:
+    """Detach toolbar view-history keys so cursor navigation owns them."""
+
+    global _view_navigation_key_claims, _view_navigation_key_snapshots
+    if _view_navigation_key_claims == 0:
+        snapshots: dict[str, list[str]] = {}
+        for setting, keys in _VIEW_NAVIGATION_KEY_REMOVALS.items():
+            snapshots[setting] = list(plt.rcParams[setting])
+            for key in keys:
+                if key in plt.rcParams[setting]:
+                    plt.rcParams[setting].remove(key)
+        _view_navigation_key_snapshots = snapshots
+    _view_navigation_key_claims += 1
+
+
+def _restore_view_navigation_keys() -> None:
+    """Release one session claim and restore defaults on the last release."""
+
+    global _view_navigation_key_claims, _view_navigation_key_snapshots
+    if _view_navigation_key_claims == 0:
+        return
+    _view_navigation_key_claims -= 1
+    if _view_navigation_key_claims == 0:
+        for setting, snapshot in (_view_navigation_key_snapshots or {}).items():
+            plt.rcParams[setting] = list(snapshot)
+        _view_navigation_key_snapshots = None
+
 
 class DataCursor:
     """
@@ -22,7 +62,7 @@ class DataCursor:
        （跨所有系列，基于屏幕像素的欧氏距离）。
     2. 所有未锁定的游标同步移动到同一帧位置，
        方便对比不同系列的数据。
-    3. 支持方向键及 Home/End 键精确移动游标。
+    3. 方向键及 Home/End 键精确移动选中的游标（锁定与否皆可）。
     4. 每个系列有一个默认游标，Shift+左键可新增锁定游标。
     """
 
@@ -341,8 +381,6 @@ class DataCursor:
         cursor = self._selected
         if cursor is None:
             return
-        if cursor.locked:
-            return
 
         series = self.series_list[cursor.series_idx]
         valid_indices = self._valid_indices_list[cursor.series_idx]
@@ -362,17 +400,19 @@ class DataCursor:
         if 0 <= new_position < len(valid_indices):
             selected_idx = int(valid_indices[new_position])
             target_frame = series.frames[selected_idx]
+            follow_tooltip = cursor.tooltip.get_visible()
             for candidate in self.cursors:
+                if candidate is cursor:
+                    self._update_cursor_visuals(
+                        candidate, selected_idx, show_tooltip=follow_tooltip
+                    )
+                    continue
                 if candidate.locked:
                     continue
-                target_idx = (
-                    selected_idx
-                    if candidate is cursor
-                    else self._nearest_index_for_frame(
-                        candidate.series_idx, target_frame
-                    )
+                self._update_cursor_visuals(
+                    candidate,
+                    self._nearest_index_for_frame(candidate.series_idx, target_frame),
                 )
-                self._update_cursor_visuals(candidate, target_idx)
             self.fig.canvas.draw_idle()
 
     def remove_selected_cursor(self) -> bool:
@@ -587,6 +627,7 @@ class FigureDispatcher:
             canvas.mpl_connect("draw_event", self.on_draw),
             canvas.mpl_connect("close_event", self.on_close),
         ]
+        _suppress_view_navigation_keys()
 
     def _toolbar_is_active(self) -> bool:
         manager = getattr(self.figure.canvas, "manager", None)
@@ -746,6 +787,7 @@ class FigureDispatcher:
     def disconnect(self) -> None:
         if not self.connected:
             return
+        _restore_view_navigation_keys()
         layout_changed = self.layout.restore(request_draw=False)
         for callback_id in self._canvas_callback_ids:
             self.figure.canvas.mpl_disconnect(callback_id)

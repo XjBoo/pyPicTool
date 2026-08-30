@@ -825,7 +825,7 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(highlights["red"].get_xdata()[0], 0)
         self.assertEqual(highlights["blue"].get_xdata()[0], 0)
 
-    def test_locked_selected_cursor_freezes_and_unlocked_keyboard_synchronizes(self):
+    def test_keyboard_moves_the_selected_cursor_regardless_of_lock(self):
         from interactive_plotting import create_interactive_plot
 
         session = create_interactive_plot(
@@ -835,18 +835,69 @@ class InteractivePlotTests(unittest.TestCase):
             ]
         )
         axis = session.axes[0]
+        # Lock the blue default cursor at frame 0; moving red must leave it.
+        send_mouse_event(session, "motion_notify_event", axis, 0, 2.0)
+        send_mouse_event(session, "button_press_event", axis, 0, 2.0, button=1)
+        # Select and lock the red default cursor at frame 0.
         send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
         send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
 
         send_key_event(session, "end")
         highlights = cursor_highlights(axis)
-        self.assertEqual(highlights["red"].get_xdata()[0], 0)
+        self.assertEqual(highlights["red"].get_xdata()[0], 14)
         self.assertEqual(highlights["blue"].get_xdata()[0], 0)
 
-        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
-        send_key_event(session, "end")
+        # Unlocking blue through a click resumes its keyboard navigation.
+        send_mouse_event(session, "motion_notify_event", axis, 0, 2.0)
+        send_mouse_event(session, "button_press_event", axis, 0, 2.0, button=1)
+        send_key_event(session, "right")
+        highlights = cursor_highlights(axis)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 4)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
-        self.assertEqual(highlights["blue"].get_xdata()[0], 10)
+
+    def test_keyboard_navigation_requires_a_selected_cursor(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        marker = cursor_highlights(axis)["red"]
+        self.assertEqual(marker.get_xdata()[0], 0)
+
+        send_key_event(session, "right")
+        self.assertEqual(marker.get_xdata()[0], 0)
+        self.assertFalse(any(text.get_visible() for text in axis.texts))
+
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        send_key_event(session, "right")
+        self.assertEqual(marker.get_xdata()[0], 1)
+        self.assertFalse(any(text.get_visible() for text in axis.texts))
+
+    def test_keyboard_movement_carries_the_visible_tooltip_with_the_cursor(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        axis.xaxis.set_major_formatter(
+            FuncFormatter(lambda value, _position: f"F{value:.2f}")
+        )
+        axis.yaxis.set_major_formatter(
+            FuncFormatter(lambda value, _position: f"V{value:.2f}")
+        )
+
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        tooltip = axis.texts[0]
+        self.assertTrue(tooltip.get_visible())
+        self.assertEqual(tooltip.get_text(), "Frame: F0.00\nValue: V0.00")
+
+        send_key_event(session, "right")
+
+        self.assertEqual(cursor_highlights(axis)["red"].get_xdata()[0], 1)
+        self.assertEqual(tooltip.xy, (1, 1.0))
+        self.assertEqual(tooltip.get_text(), "Frame: F1.00\nValue: V1.00")
 
     def test_toolbar_navigation_mode_suspends_cursor_interaction(self):
         from interactive_plotting import create_interactive_plot
@@ -913,10 +964,7 @@ class InteractivePlotTests(unittest.TestCase):
             clicked_tooltip_state,
         )
         send_key_event(session, "home")
-        self.assertEqual(
-            (left.texts[0].xy, left.texts[0].get_text()),
-            clicked_tooltip_state,
-        )
+        self.assertEqual(left.texts[0].xy, (0, 0.0))
         self.assertEqual(visible_tooltips(), [left.texts[0]])
 
         session.toggle_axes_maximized(left)
@@ -1245,6 +1293,64 @@ class InteractivePlotTests(unittest.TestCase):
                 "motion_notify_event", resized_motion
             )
             self.assertGreater(transform.call_count, calls_after_hover)
+
+
+class ViewNavigationKeymapTests(unittest.TestCase):
+    """Session keymap claims must stay balanced despite Agg's silent closes."""
+
+    SETTINGS = ("keymap.back", "keymap.forward", "keymap.home")
+
+    def setUp(self):
+        from interactive_plotting import core as plot_core
+
+        self._core = plot_core
+        self._claims = plot_core._view_navigation_key_claims
+        self._snapshots = plot_core._view_navigation_key_snapshots
+        self._defaults = {
+            setting: list(plt.rcParams[setting]) for setting in self.SETTINGS
+        }
+
+    def tearDown(self):
+        plt.close("all")
+        self._core._view_navigation_key_claims = self._claims
+        self._core._view_navigation_key_snapshots = self._snapshots
+        for setting, snapshot in self._defaults.items():
+            plt.rcParams[setting] = snapshot
+
+    def test_sessions_detach_view_navigation_keys_until_the_last_disconnect(self):
+        from interactive_plotting import create_interactive_plot
+
+        first = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "first", color="red")]
+        )
+        second = create_interactive_plot(
+            [SeriesData([0, 1], [0.0, 1.0], "second", color="blue")]
+        )
+        self.assertNotIn("left", plt.rcParams["keymap.back"])
+        self.assertNotIn("backspace", plt.rcParams["keymap.back"])
+        self.assertNotIn("right", plt.rcParams["keymap.forward"])
+        self.assertNotIn("home", plt.rcParams["keymap.home"])
+
+        first.disconnect()
+        self.assertNotIn("left", plt.rcParams["keymap.back"])
+
+        second.close()
+        for setting in self.SETTINGS:
+            self.assertEqual(
+                list(plt.rcParams[setting]), self._defaults[setting]
+            )
+
+    def test_keymap_cleanup_tolerates_keys_already_removed(self):
+        from interactive_plotting import create_interactive_plot
+
+        reduced = [key for key in self._defaults["keymap.home"] if key != "home"]
+        with patch.dict(plt.rcParams, {"keymap.home": list(reduced)}):
+            session = create_interactive_plot(
+                [SeriesData([0, 1], [0.0, 1.0], "sample", color="red")]
+            )
+            self.assertNotIn("home", plt.rcParams["keymap.home"])
+            session.disconnect()
+            self.assertEqual(list(plt.rcParams["keymap.home"]), reduced)
 
 
 if __name__ == "__main__":
