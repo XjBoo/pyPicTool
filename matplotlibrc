@@ -1,0 +1,6 @@
+# GUI stack decision (see README "GUI stack"): interactive windows run
+# matplotlib's QtAgg backend on PySide6. Pin it here so a plain run from the
+# repository root honors the decision instead of macOS resolving the native
+# macosx backend. Tests and benchmarks force Agg in their own code and are
+# unaffected.
+backend: qtagg

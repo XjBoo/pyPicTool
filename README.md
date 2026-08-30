@@ -78,8 +78,10 @@ Interactive windows run Matplotlib's QtAgg backend on PySide6, the only Qt
 binding declared and installed. This combination was selected after a
 backend-comparison prototype (silx and plotpy were rejected because their
 application-layer abstractions constrain the custom tooltip, subplot-focus,
-and draggable-legend interactions). Automated checks stay on the Agg backend
-and never require Qt.
+and draggable-legend interactions). The repository-root `matplotlibrc` pins
+`backend: qtagg` because plain runs on macOS would otherwise resolve the
+native macosx backend; `MPLBACKEND` still overrides it. Automated checks
+stay on the Agg backend and never require Qt.
 
 ## Demo, tests, and performance
 
