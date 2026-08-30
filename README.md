@@ -48,12 +48,16 @@ about the future business-data interface.
   cursors by frame value.
 - Left click selects that series' permanent default cursor, toggles its locked
   state, and shows the figure's only tooltip at the clicked point. The next
-  data-point click replaces that tooltip, including across subplots.
-  Locked cursors ignore mouse and keyboard movement.
+  data-point click replaces that tooltip, including across subplots. Locked
+  cursors ignore mouse-hover following but stay keyboard-navigable while
+  selected.
 - Shift+left click adds a locked extra cursor. Delete/Backspace removes the
   selected extra cursor. Default cursors cannot be deleted.
-- Left/Right and Home/End move only an explicitly selected, unlocked cursor,
-  then synchronize the other unlocked cursors.
+- Left/Right and Home/End move the explicitly selected cursor whether it is
+  locked or not, then synchronize the other unlocked cursors. While a session
+  is active, Left/Right/Home/Backspace are detached from the Matplotlib
+  navigation toolbar's view history; the default bindings return once the
+  last session disconnects.
 - Drag a visible tooltip to reposition its text. Cursor interaction pauses
   while tooltip dragging or toolbar pan/zoom is active.
 - Double-click a subplot background to make that axes fill the current
@@ -67,10 +71,11 @@ about the future business-data interface.
 
 Tooltips stay hidden during initialization and hover. A data-point left click
 shows one white tooltip containing only `Frame` and `Value`, both formatted by
-the corresponding axis formatter. Hover and keyboard cursor movement do not
-move it away from that clicked point. Cursors use only point markers and
-tooltips. A gold marker edge identifies the selected cursor, while a square
-marker identifies a locked cursor.
+the corresponding axis formatter. Hover never moves a tooltip; keyboard
+movement of the selected cursor carries its visible tooltip to the new point
+and refreshes the values. Cursors use only point markers and tooltips. A gold
+marker edge identifies the selected cursor, while a square marker identifies
+a locked cursor.
 
 ## GUI stack
 
