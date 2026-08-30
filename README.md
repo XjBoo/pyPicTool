@@ -53,11 +53,13 @@ about the future business-data interface.
   selected.
 - Shift+left click adds a locked extra cursor. Delete/Backspace removes the
   selected extra cursor. Default cursors cannot be deleted.
-- Left/Right and Home/End move the explicitly selected cursor whether it is
-  locked or not, then synchronize the other unlocked cursors. While a session
-  is active, Left/Right/Home/Backspace are detached from the Matplotlib
-  navigation toolbar's view history; the default bindings return once the
-  last session disconnects.
+- Left/Right and Home/End move only the cursor anchored by the last left
+  click (a data-point click, a Shift+left-click extra cursor, or a click on
+  its tooltip), whether it is locked or not, then synchronize the other
+  unlocked cursors. Hovering moves the gold selection but never the keyboard
+  target. While a session is active, Left/Right/Home/Backspace are detached
+  from the Matplotlib navigation toolbar's view history; the default
+  bindings return once the last session disconnects.
 - Drag a visible tooltip to reposition its text. Cursor interaction pauses
   while tooltip dragging or toolbar pan/zoom is active.
 - Double-click a subplot background to make that axes fill the current

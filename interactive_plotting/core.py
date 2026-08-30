@@ -62,7 +62,8 @@ class DataCursor:
        （跨所有系列，基于屏幕像素的欧氏距离）。
     2. 所有未锁定的游标同步移动到同一帧位置，
        方便对比不同系列的数据。
-    3. 方向键及 Home/End 键精确移动选中的游标（锁定与否皆可）。
+    3. 方向键及 Home/End 键精确移动左键点击选中的游标
+       （锁定与否皆可；悬停选中的游标不响应键盘）。
     4. 每个系列有一个默认游标，Shift+左键可新增锁定游标。
     """
 
@@ -120,6 +121,7 @@ class DataCursor:
     class StateSnapshot:
         cursors: tuple[DataCursor.CursorState, ...]
         selected: DataCursor.Cursor | None
+        click_selected: DataCursor.Cursor | None
 
     def __init__(self, ax: Axes, series_list: Sequence[SeriesData]) -> None:
         self.ax = ax
@@ -132,6 +134,7 @@ class DataCursor:
         self._sync_frames_list: list[np.ndarray] = []
         self._sync_indices_list: list[np.ndarray] = []
         self._selected: DataCursor.Cursor | None = None
+        self._click_selected: DataCursor.Cursor | None = None
         self._dragging_cursor: DataCursor.Cursor | None = None
         self._drag_start_mouse: tuple[float, float] | None = None
         self._drag_start_position: tuple[float, float] | None = None
@@ -324,6 +327,7 @@ class DataCursor:
                 contains, _ = cursor.tooltip.contains(event)
                 if contains:
                     self._select_cursor(cursor)
+                    self._click_selected = cursor
                     self._dragging_cursor = cursor
                     self._drag_start_mouse = (event.x, event.y)
                     self._drag_start_position = cursor.tooltip.get_position()
@@ -354,12 +358,14 @@ class DataCursor:
             cursor.locked = True
             self.cursors.append(cursor)
             self._select_cursor(cursor)
+            self._click_selected = cursor
             self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
             cursor.apply_style(True)
             return cursor
 
         cursor = self.cursors[series_idx]
         self._select_cursor(cursor)
+        self._click_selected = cursor
         cursor.locked = not cursor.locked
         cursor.apply_style(True)
         self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
@@ -378,7 +384,7 @@ class DataCursor:
             self.remove_selected_cursor()
             return
 
-        cursor = self._selected
+        cursor = self._click_selected
         if cursor is None:
             return
 
@@ -419,6 +425,8 @@ class DataCursor:
         cursor = self._selected
         if cursor is None or cursor.is_default:
             return False
+        if cursor is self._click_selected:
+            self._click_selected = None
         owner_default = self.cursors[cursor.series_idx]
         cursor.highlight.remove()
         cursor.tooltip.remove()
@@ -435,6 +443,8 @@ class DataCursor:
             self.cursors.remove(cursor)
         if self._selected in extras:
             self._select_cursor(self.cursors[0])
+        if self._click_selected in extras:
+            self._click_selected = None
         if extras and request_draw:
             self.fig.canvas.draw_idle()
         return len(extras)
@@ -466,6 +476,7 @@ class DataCursor:
                 for cursor in self.cursors
             ),
             selected=self._selected,
+            click_selected=self._click_selected,
         )
 
     def restore_state(self, snapshot: StateSnapshot) -> None:
@@ -477,6 +488,7 @@ class DataCursor:
             cursor.tooltip.remove()
         self.cursors = captured_cursors
         self._selected = snapshot.selected
+        self._click_selected = snapshot.click_selected
         for state in snapshot.cursors:
             cursor = state.cursor
             cursor.locked = state.locked
@@ -502,6 +514,7 @@ class DataCursor:
         self._drag_start_mouse = None
         self._drag_start_position = None
         self._selected = None
+        self._click_selected = None
         self._disp_xy_list = None
         self._disp_indices_list = None
         self._disp_cache_valid = False

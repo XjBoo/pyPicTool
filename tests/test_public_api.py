@@ -419,6 +419,10 @@ class InteractivePlotTests(unittest.TestCase):
         send_mouse_event(session, "motion_notify_event", right, 0, 0.0)
         right_marker = cursor_highlights(right)["blue"]
         self.assertEqual(right_marker.get_markeredgecolor(), "gold")
+        # Clicking anchors right's cursor for the keyboard before maximizing.
+        send_mouse_event(
+            session, "button_press_event", right, 0, 0.0, button=1
+        )
 
         send_mouse_event(
             session, "button_press_event", left, 1, 1.0, button=1, dblclick=False
@@ -795,6 +799,7 @@ class InteractivePlotTests(unittest.TestCase):
         send_mouse_event(session, "motion_notify_event", axis, 0, 10.0)
         selected = cursor_highlights(axis)["red"]
         self.assertEqual(selected.get_ydata()[0], 10.0)
+        send_mouse_event(session, "button_press_event", axis, 0, 10.0, button=1)
 
         send_key_event(session, "right")
         self.assertEqual(selected.get_xdata()[0], 1)
@@ -855,7 +860,7 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(highlights["blue"].get_xdata()[0], 4)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
 
-    def test_keyboard_navigation_requires_a_selected_cursor(self):
+    def test_keyboard_requires_a_click_selected_cursor(self):
         from interactive_plotting import create_interactive_plot
 
         session = create_interactive_plot(
@@ -869,10 +874,38 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(marker.get_xdata()[0], 0)
         self.assertFalse(any(text.get_visible() for text in axis.texts))
 
+        # Hovering selects the cursor but never anchors it for the keyboard.
         send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
         send_key_event(session, "right")
-        self.assertEqual(marker.get_xdata()[0], 1)
+        self.assertEqual(marker.get_xdata()[0], 0)
         self.assertFalse(any(text.get_visible() for text in axis.texts))
+
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        send_key_event(session, "right")
+        self.assertEqual(marker.get_xdata()[0], 1)
+        tooltip = next(text for text in axis.texts if text.get_visible())
+        self.assertEqual(tooltip.xy, (1, 1.0))
+
+    def test_keyboard_keeps_targeting_the_clicked_cursor_while_hovering(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 14], [0.0, 1.0], "red", color="red"),
+                SeriesData([0, 7, 14], [10.0, 11.0, 12.0], "blue", color="blue"),
+            ]
+        )
+        axis = session.axes[0]
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+
+        # Hovering the other series moves the selection, not the keyboard target.
+        send_mouse_event(session, "motion_notify_event", axis, 0, 10.0)
+        self.assertEqual(cursor_highlights(axis)["blue"].get_markeredgecolor(), "gold")
+
+        send_key_event(session, "end")
+        highlights = cursor_highlights(axis)
+        self.assertEqual(highlights["red"].get_xdata()[0], 14)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 14)
 
     def test_keyboard_movement_carries_the_visible_tooltip_with_the_cursor(self):
         from interactive_plotting import create_interactive_plot
