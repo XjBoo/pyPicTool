@@ -58,16 +58,17 @@ def _restore_view_navigation_keys() -> None:
 class DataCursor:
     """
     自定义游标类（支持多数据系列）：
-    1. 鼠标悬停自动吸附到最近数据点
-       （跨所有系列，基于屏幕像素的欧氏距离）。
-    2. 所有未锁定的游标同步移动到同一帧位置，
-       方便对比不同系列的数据。
+    1. 鼠标贴近某个数据点（屏幕像素距离不超过命中阈值）时，
+       仅该系列的游标出现并吸附到该点。
+    2. 各系列游标完全独立：悬停不移动、不显示其他系列，
+       键盘移动也不跨系列同步。
     3. 方向键及 Home/End 键精确移动左键点击选中的游标
        （锁定与否皆可；悬停选中的游标不响应键盘）。
-    4. 每个系列有一个默认游标，Shift+左键可新增锁定游标。
+    4. 每个系列有一个默认游标，Shift+左键可新增锁定游标；
+       未锁定的游标仅在悬停贴近时可见。
     """
 
-    _CLICK_HIT_RADIUS_PIXELS = 10.0
+    _HIT_RADIUS_PIXELS = 6.0
 
     class Cursor:
         """单个游标实例（高亮点 + tooltip）。"""
@@ -91,6 +92,7 @@ class DataCursor:
             (self.highlight,) = ax.plot(
                 [x0], [y0], marker="o", color=color, markersize=8, zorder=5
             )
+            self.highlight.set_visible(False)
             self.tooltip = ax.annotate(
                 "",
                 xy=(0, 0),
@@ -112,6 +114,7 @@ class DataCursor:
         cursor: DataCursor.Cursor
         current_index: int
         locked: bool
+        marker_visible: bool
         tooltip_visible: bool
         tooltip_anchor: tuple[float, float]
         tooltip_position: tuple[float, float]
@@ -131,8 +134,6 @@ class DataCursor:
         self._disp_cache_valid = False
         self._disp_cache_signature: tuple[float, ...] | None = None
         self._valid_indices_list: list[np.ndarray] = []
-        self._sync_frames_list: list[np.ndarray] = []
-        self._sync_indices_list: list[np.ndarray] = []
         self._selected: DataCursor.Cursor | None = None
         self._click_selected: DataCursor.Cursor | None = None
         self._dragging_cursor: DataCursor.Cursor | None = None
@@ -142,13 +143,7 @@ class DataCursor:
 
         for series_idx, series in enumerate(self.series_list):
             valid_indices = np.flatnonzero(series.valid_mask)
-            valid_frames = series.frames[valid_indices]
-            sync_frames, inverse = np.unique(valid_frames, return_inverse=True)
-            sync_indices = np.full(sync_frames.size, series.frames.size, dtype=int)
-            np.minimum.at(sync_indices, inverse, valid_indices)
             self._valid_indices_list.append(valid_indices)
-            self._sync_frames_list.append(sync_frames)
-            self._sync_indices_list.append(sync_indices)
 
             first_idx = int(valid_indices[0])
             x0, y0 = series.frames[first_idx], series.values[first_idx]
@@ -230,35 +225,17 @@ class DataCursor:
                 best_local_idx = int(self._disp_indices_list[series_idx][min_idx])
         return best_series_idx, best_local_idx, float(best_d2)
 
-    def _nearest_index_for_frame(self, series_idx: int, target_frame: float) -> int:
-        frames = self._sync_frames_list[series_idx]
-        original_indices = self._sync_indices_list[series_idx]
-        insertion = int(np.searchsorted(frames, target_frame))
-        candidate_positions = []
-        if insertion > 0:
-            candidate_positions.append(insertion - 1)
-        if insertion < frames.size:
-            candidate_positions.append(insertion)
+    def _hide_transient_highlights(self, except_cursor: Cursor | None = None) -> bool:
+        """Hide unlocked marker highlights; report whether anything changed."""
 
-        target_number = (
-            target_frame.item()
-            if isinstance(target_frame, np.generic)
-            else target_frame
-        )
-
-        def distance_and_index(original_index: int) -> tuple[float, int]:
-            candidate = self.series_list[series_idx].frames[original_index]
-            candidate_number = (
-                candidate.item() if isinstance(candidate, np.generic) else candidate
-            )
-            return abs(candidate_number - target_number), int(original_index)
-
-        return int(
-            min(
-                (original_indices[position] for position in candidate_positions),
-                key=distance_and_index,
-            )
-        )
+        changed = False
+        for cursor in self.cursors:
+            if cursor is except_cursor or cursor.locked:
+                continue
+            if cursor.highlight.get_visible():
+                cursor.highlight.set_visible(False)
+                changed = True
+        return changed
 
     def _update_cursor_visuals(
         self, cursor: Cursor, local_idx: int, show_tooltip: bool = False
@@ -282,10 +259,12 @@ class DataCursor:
         cursor.tooltip.set_text(f"Frame: {frame_text}\nValue: {value_text}")
         cursor.tooltip.set_visible(True)
 
-    def on_hover(self, event: MouseEvent) -> None:
+    def on_hover(self, event: MouseEvent) -> bool:
+        """React to one motion event; return whether a redraw is needed."""
+
         if self._dragging_cursor is not None:
             if event.x is None or event.y is None:
-                return
+                return False
             start_x, start_y = self._drag_start_mouse
             text_x, text_y = self._drag_start_position
             points_per_pixel = 72.0 / self.fig.dpi
@@ -296,30 +275,29 @@ class DataCursor:
                 )
             )
             self.fig.canvas.draw_idle()
-            return
-        if event.inaxes != self.ax:
-            return
+            return False
+        if event.inaxes is not self.ax:
+            return self._hide_transient_highlights()
         if event.x is None or event.y is None:
-            return
+            return False
 
-        series_idx, local_idx, _distance_squared = self._nearest_point_from_px(
+        series_idx, local_idx, distance_squared = self._nearest_point_from_px(
             event.x, event.y
         )
-        target_frame = self.series_list[series_idx].frames[local_idx]
-        selected_cursor = self.cursors[series_idx]
-        need_draw = self._select_cursor(selected_cursor)
+        if distance_squared > self._HIT_RADIUS_PIXELS**2:
+            return self._hide_transient_highlights()
 
-        for cursor in self.cursors:
-            target_idx = (
-                local_idx
-                if cursor is selected_cursor
-                else self._nearest_index_for_frame(cursor.series_idx, target_frame)
-            )
-            if not cursor.locked and cursor.current_index != target_idx:
-                self._update_cursor_visuals(cursor, target_idx)
-                need_draw = True
-        if need_draw:
-            self.fig.canvas.draw_idle()
+        cursor = self.cursors[series_idx]
+        need_draw = self._select_cursor(cursor)
+        if self._hide_transient_highlights(cursor):
+            need_draw = True
+        if not cursor.locked and (
+            not cursor.highlight.get_visible() or cursor.current_index != local_idx
+        ):
+            self._update_cursor_visuals(cursor, local_idx)
+            cursor.highlight.set_visible(True)
+            need_draw = True
+        return need_draw
 
     def on_click(self, event: MouseEvent) -> Cursor | None:
         if getattr(event, "button", None) == 1:
@@ -343,7 +321,7 @@ class DataCursor:
         series_idx, local_idx, distance_squared = self._nearest_point_from_px(
             event.x, event.y
         )
-        if distance_squared > self._CLICK_HIT_RADIUS_PIXELS**2:
+        if distance_squared > self._HIT_RADIUS_PIXELS**2:
             return
 
         is_shift = "shift" in str(getattr(event, "key", "")).lower()
@@ -360,6 +338,7 @@ class DataCursor:
             self._select_cursor(cursor)
             self._click_selected = cursor
             self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
+            cursor.highlight.set_visible(True)
             cursor.apply_style(True)
             return cursor
 
@@ -369,6 +348,7 @@ class DataCursor:
         cursor.locked = not cursor.locked
         cursor.apply_style(True)
         self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
+        cursor.highlight.set_visible(True)
         return cursor
 
     def on_release(self, _event: MouseEvent) -> None:
@@ -388,7 +368,6 @@ class DataCursor:
         if cursor is None:
             return
 
-        series = self.series_list[cursor.series_idx]
         valid_indices = self._valid_indices_list[cursor.series_idx]
         current_position = int(np.flatnonzero(valid_indices == cursor.current_index)[0])
 
@@ -405,20 +384,11 @@ class DataCursor:
 
         if 0 <= new_position < len(valid_indices):
             selected_idx = int(valid_indices[new_position])
-            target_frame = series.frames[selected_idx]
             follow_tooltip = cursor.tooltip.get_visible()
-            for candidate in self.cursors:
-                if candidate is cursor:
-                    self._update_cursor_visuals(
-                        candidate, selected_idx, show_tooltip=follow_tooltip
-                    )
-                    continue
-                if candidate.locked:
-                    continue
-                self._update_cursor_visuals(
-                    candidate,
-                    self._nearest_index_for_frame(candidate.series_idx, target_frame),
-                )
+            self._update_cursor_visuals(
+                cursor, selected_idx, show_tooltip=follow_tooltip
+            )
+            cursor.highlight.set_visible(True)
             self.fig.canvas.draw_idle()
 
     def remove_selected_cursor(self) -> bool:
@@ -468,6 +438,7 @@ class DataCursor:
                     cursor=cursor,
                     current_index=cursor.current_index,
                     locked=cursor.locked,
+                    marker_visible=cursor.highlight.get_visible(),
                     tooltip_visible=cursor.tooltip.get_visible(),
                     tooltip_anchor=tuple(cursor.tooltip.xy),
                     tooltip_position=cursor.tooltip.get_position(),
@@ -495,6 +466,7 @@ class DataCursor:
             self._update_cursor_visuals(
                 cursor, state.current_index, show_tooltip=False
             )
+            cursor.highlight.set_visible(state.marker_visible)
             cursor.tooltip.xy = state.tooltip_anchor
             cursor.tooltip.set_visible(state.tooltip_visible)
             cursor.tooltip.set_position(state.tooltip_position)
@@ -663,6 +635,17 @@ class FigureDispatcher:
         for controller in self.controllers:
             controller.hide_tooltips(except_cursor)
 
+    def _hide_transient_highlights(
+        self, except_controller: DataCursor | None = None
+    ) -> bool:
+        changed = False
+        for controller in self.controllers:
+            if controller is except_controller:
+                continue
+            if controller._hide_transient_highlights():
+                changed = True
+        return changed
+
     def on_motion(self, event: MouseEvent) -> None:
         if self._toolbar_is_active():
             return
@@ -673,9 +656,15 @@ class FigureDispatcher:
             return
         controller = self._by_axes.get(event.inaxes)
         if controller is None:
+            if self._hide_transient_highlights():
+                self.figure.canvas.draw_idle()
             return
         self.active_controller = controller
-        controller.on_hover(event)
+        need_draw = controller.on_hover(event)
+        if self._hide_transient_highlights(controller):
+            need_draw = True
+        if need_draw:
+            self.figure.canvas.draw_idle()
 
     def on_press(self, event: MouseEvent) -> None:
         if self._toolbar_is_active() or self.dragging_controller is not None:

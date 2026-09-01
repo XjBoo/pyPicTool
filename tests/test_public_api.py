@@ -617,12 +617,12 @@ class InteractivePlotTests(unittest.TestCase):
             np.isnan(data_line.get_ydata()), [False, True, True, False]
         )
         self.assertEqual(len(scatter.get_offsets()), 2)
-        send_mouse_event(session, "motion_notify_event", session.axes[0], 1, 2.0)
-        self.assertNotEqual(
-            cursor_highlight_lines(session.axes[0])[0].get_xdata()[0], 1
+        send_mouse_event(session, "motion_notify_event", session.axes[0], 3, 4.0)
+        self.assertEqual(
+            cursor_highlight_lines(session.axes[0])[0].get_xdata()[0], 3
         )
 
-    def test_hover_synchronizes_each_series_by_nearest_frame_value(self):
+    def test_hover_highlights_only_the_nearest_hit_series(self):
         from interactive_plotting import create_interactive_plot
 
         session = create_interactive_plot(
@@ -640,14 +640,79 @@ class InteractivePlotTests(unittest.TestCase):
 
         figure.canvas.callbacks.process("motion_notify_event", event)
 
-        highlights = {
-            line.get_color(): line
-            for line in axis.lines
-            if line.get_marker() == "o"
-        }
+        highlights = cursor_highlights(axis)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
-        self.assertEqual(highlights["blue"].get_xdata()[0], 10)
-        self.assertEqual(highlights["green"].get_xdata()[0], 18)
+        self.assertTrue(highlights["red"].get_visible())
+        self.assertFalse(highlights["blue"].get_visible())
+        self.assertFalse(highlights["green"].get_visible())
+
+    def test_hover_requires_a_hit_within_the_shared_radius(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        marker = cursor_highlights(axis)["red"]
+        session.figure.canvas.draw()
+        x_pixel, y_pixel = axis.transData.transform((0, 0.0))
+
+        send_canvas_mouse_event(
+            session, "motion_notify_event", x_pixel + 8.0, y_pixel
+        )
+        self.assertFalse(marker.get_visible())
+        self.assertEqual(marker.get_xdata()[0], 0)
+
+        send_canvas_mouse_event(session, "motion_notify_event", x_pixel, y_pixel)
+        self.assertTrue(marker.get_visible())
+        self.assertEqual(marker.get_xdata()[0], 0)
+
+    def test_overlapping_hits_highlight_only_the_closest_series(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 10], [0.0, 10.0], "red", color="red"),
+                SeriesData([0, 10], [0.1, 10.1], "blue", color="blue"),
+            ]
+        )
+        axis = session.axes[0]
+        session.figure.canvas.draw()
+
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        highlights = cursor_highlights(axis)
+        self.assertTrue(highlights["red"].get_visible())
+        self.assertFalse(highlights["blue"].get_visible())
+
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.1)
+        highlights = cursor_highlights(axis)
+        self.assertTrue(highlights["blue"].get_visible())
+        self.assertFalse(highlights["red"].get_visible())
+
+    def test_unlocked_markers_are_transient_and_locked_markers_persist(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        marker = cursor_highlights(axis)["red"]
+        session.figure.canvas.draw()
+        self.assertFalse(marker.get_visible())
+
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        self.assertTrue(marker.get_visible())
+
+        send_mouse_event(session, "motion_notify_event", axis, 1.5, 1.5)
+        self.assertFalse(marker.get_visible())
+
+        send_mouse_event(session, "motion_notify_event", axis, 1, 1.0)
+        send_mouse_event(session, "button_press_event", axis, 1, 1.0, button=1)
+        self.assertTrue(marker.get_visible())
+
+        send_mouse_event(session, "motion_notify_event", axis, 0, 0.0)
+        self.assertTrue(marker.get_visible())
+        self.assertEqual(marker.get_xdata()[0], 1)
 
     def test_hover_keeps_tooltips_hidden_and_click_shows_only_the_hit_point(self):
         from interactive_plotting import create_interactive_plot
@@ -786,7 +851,10 @@ class InteractivePlotTests(unittest.TestCase):
         with np.errstate(over="raise"):
             send_mouse_event(session, "motion_notify_event", axis, 5, 1.0)
 
-        self.assertEqual(cursor_highlights(axis)["blue"].get_xdata()[0], 0)
+        highlights = cursor_highlights(axis)
+        self.assertTrue(highlights["red"].get_visible())
+        self.assertEqual(highlights["red"].get_xdata()[0], 5)
+        self.assertFalse(highlights["blue"].get_visible())
 
     def test_duplicate_frames_preserve_the_explicit_selected_point(self):
         from interactive_plotting import create_interactive_plot
@@ -905,7 +973,7 @@ class InteractivePlotTests(unittest.TestCase):
         send_key_event(session, "end")
         highlights = cursor_highlights(axis)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
-        self.assertEqual(highlights["blue"].get_xdata()[0], 14)
+        self.assertEqual(highlights["blue"].get_xdata()[0], 0)
 
     def test_keyboard_movement_carries_the_visible_tooltip_with_the_cursor(self):
         from interactive_plotting import create_interactive_plot
