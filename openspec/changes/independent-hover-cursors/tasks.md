@@ -17,4 +17,4 @@
 
 - [x] 4.1 改写 README Interaction 一节：悬停契约改为"贴近数据点（共享命中阈值）才触发单系列高亮、移开即隐藏、初始全部隐藏"，删除同步描述（Data and synchronization rules 一节的同步规则同步删除）。验证：通读 README 与两份 spec（cursor-hover-highlight、cursor-keyboard-navigation）无矛盾表述
 - [x] 4.2 全量自动化检查无回归。验证：`MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v` 全部通过；`PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py` 可运行且无异常；`openspec validate --changes` 通过
-- [ ] 4.3 手动验证 QtAgg 路径（不进自动测试）：`venv/bin/python interactive_plot.py` 打开后初始无高亮；鼠标在空白处移动无高亮；贴近某条线的点时仅该线出现高亮，另一条线无反应；点击锚定后锁定游标持续显示；方向键只移动点击锚定的线。验证：窗口行为逐条符合 spec 场景
+- [x] 4.3 手动验证 QtAgg 路径（不进自动测试）：`venv/bin/python interactive_plot.py` 打开后初始无高亮；鼠标在空白处移动无高亮；贴近某条线的点时仅该线出现高亮，另一条线无反应；点击锚定后锁定游标持续显示；方向键只移动点击锚定的线。验证：窗口行为逐条符合 spec 场景
