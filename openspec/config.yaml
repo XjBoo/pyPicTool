@@ -1,0 +1,45 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Python, matplotlib/silx（交互绘图库）
+  结构: interactive_plotting/core.py 为核心模块
+  Testing: pytest（tests/）
+  风格: 参考 git log，小步提交，每个功能一个 commit
+rules:
+  specs:
+    - 文档相关内容都用简体中文撰写
+    - 场景用 WHEN/THEN 格式
+  design:
+    - 涉及鼠标交互时说明事件处理顺序
+
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
