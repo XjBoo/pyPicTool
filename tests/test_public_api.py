@@ -1196,6 +1196,48 @@ class InteractivePlotTests(unittest.TestCase):
                 self.assertEqual(cursor_highlights(right)["blue"].get_xdata()[0], 0)
                 session.close()
 
+    def test_shift_click_replaces_an_older_panel_keyboard_target(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1, 2],
+                    [0.0, 1.0, 2.0],
+                    "left",
+                    panel=(0, 0),
+                    color="red",
+                ),
+                SeriesData(
+                    [0, 1, 2],
+                    [10.0, 11.0, 12.0],
+                    "right",
+                    panel=(0, 1),
+                    color="blue",
+                ),
+            ]
+        )
+        left, right = session.axes
+        send_mouse_event(session, "button_press_event", right, 1, 11.0, button=1)
+        send_mouse_event(
+            session,
+            "button_press_event",
+            left,
+            1,
+            1.0,
+            button=1,
+            key="shift",
+        )
+        left_markers = cursor_highlight_lines(left)
+        default, extra = left_markers
+        self.assertEqual(extra.get_xdata()[0], 1)
+
+        send_key_event(session, "left")
+
+        self.assertEqual(default.get_xdata()[0], 0)
+        self.assertEqual(extra.get_xdata()[0], 0)
+        self.assertEqual(cursor_highlights(right)["blue"].get_xdata()[0], 1)
+
     def test_clicking_a_tooltip_makes_its_panel_the_keyboard_target(self):
         from interactive_plotting import create_interactive_plot
 
