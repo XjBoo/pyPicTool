@@ -809,6 +809,66 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertTrue(marker.get_visible())
         self.assertEqual(marker.get_xdata()[0], 1)
 
+    def test_motion_away_from_a_panel_hides_only_its_transient_marker(self):
+        from interactive_plotting import create_interactive_plot
+
+        for destination in ("other-panel", "outside-axes"):
+            for locked in (False, True):
+                with self.subTest(destination=destination, locked=locked):
+                    session = create_interactive_plot(
+                        [
+                            SeriesData(
+                                [0, 1],
+                                [0.0, 1.0],
+                                "left",
+                                panel=(0, 0),
+                                color="red",
+                            ),
+                            SeriesData(
+                                [0, 1],
+                                [10.0, 11.0],
+                                "right",
+                                panel=(0, 1),
+                                color="blue",
+                            ),
+                        ]
+                    )
+                    left, right = session.axes
+                    markers = {
+                        "left": cursor_highlights(left)["red"],
+                        "right": cursor_highlights(right)["blue"],
+                    }
+                    send_mouse_event(
+                        session, "motion_notify_event", left, 0, 0.0
+                    )
+                    if locked:
+                        send_mouse_event(
+                            session,
+                            "button_press_event",
+                            left,
+                            0,
+                            0.0,
+                            button=1,
+                        )
+
+                    if destination == "other-panel":
+                        send_mouse_event(
+                            session, "motion_notify_event", right, 0, 10.0
+                        )
+                    else:
+                        session.figure.canvas.draw()
+                        send_canvas_mouse_event(
+                            session, "motion_notify_event", 0, 0
+                        )
+
+                    self.assertEqual(markers["left"].get_visible(), locked)
+                    self.assertEqual(markers["left"].get_xdata()[0], 0)
+                    self.assertEqual(
+                        markers["right"].get_visible(),
+                        destination == "other-panel",
+                    )
+                    session.close()
+
     def test_hover_keeps_tooltips_hidden_and_click_shows_only_the_hit_point(self):
         from interactive_plotting import create_interactive_plot
 

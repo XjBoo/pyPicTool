@@ -23,7 +23,7 @@
 
 ### D4：删除同步机制
 
-`__init__` 中 `valid_frames`/`sync_indices` 构建块、`_sync_frames_list`/`_sync_indices_list` 字段、`_nearest_index_for_frame` 方法整体删除；`on_key` 的同步循环替换为只移动 `_click_selected` 游标。`_valid_indices_list` 保留（键盘按有效点步进仍需要）。删除后 `on_hover` 与 `on_key` 都是 O(1) 游标操作，唯一剩余的 O(N) 是 `_nearest_point_from_px` 本身（有 disp 缓存）。
+`__init__` 中 `valid_frames`/`sync_indices` 构建块、`_sync_frames_list`/`_sync_indices_list` 字段、`_nearest_index_for_frame` 方法整体删除；`on_key` 的同步循环替换为只移动 `_click_selected` 游标。`_valid_indices_list` 保留（键盘按有效点步进仍需要）。删除后 `on_key` 只操作目标游标；`on_hover` 不再同步移动其他游标，但 `_nearest_point_from_px` 仍按有效数据点数线性扫描（有 disp 缓存），瞬态高亮清理也会按当前 controller/figure 中的游标数量线性扫描。当前没有机器无关的性能门槛，不为此额外引入可见游标索引状态。
 
 键盘目标在 figure 范围内由 `FigureDispatcher.keyboard_controller` 单独记录：仅成功的数据点左键点击、Shift+左键新增或 tooltip 左键点击更新该目标；悬停只更新 `active_controller` 和视觉选择，不改变键盘目标。Left/Right/Home/End 路由到 `keyboard_controller`，因此跨面板悬停也不会劫持最近点击游标的键盘导航。双击在应用首次单击前保存该目标，并随游标状态一同恢复，避免双击最大化意外改变键盘目标。
 
