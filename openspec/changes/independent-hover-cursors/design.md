@@ -4,8 +4,8 @@
 
 ## Goals / Non-Goals
 
-- Goals：阈值化悬停、系列独立、瞬态可见性、删除同步机制、保持既有键盘/点击/tooltip/双击还原行为不变。
-- Non-Goals：不引入悬停节流或性能优化（现有 `_ensure_disp_cache` 缓存机制不动）；不改公共 API；不做"临时同步"模式（用户已确认接受同步对比损失）；不处理多面板间的交互（面板隔离已由 dispatcher 的 `inaxes` 路由保证）。
+- Goals：阈值化悬停、系列独立、瞬态可见性、删除同步机制，并保持“最近一次成功左键点击决定键盘目标”的既有行为在同面板和跨面板场景下一致；保持点击、tooltip、双击还原行为不变。
+- Non-Goals：不引入悬停节流或性能优化（现有 `_ensure_disp_cache` 缓存机制不动）；不改公共 API；不做"临时同步"模式（用户已确认接受同步对比损失）；不改变多面板悬停的 `inaxes` 隔离与路由规则。
 
 ## Decisions
 
@@ -24,6 +24,8 @@
 ### D4：删除同步机制
 
 `__init__` 中 `valid_frames`/`sync_indices` 构建块、`_sync_frames_list`/`_sync_indices_list` 字段、`_nearest_index_for_frame` 方法整体删除；`on_key` 的同步循环替换为只移动 `_click_selected` 游标。`_valid_indices_list` 保留（键盘按有效点步进仍需要）。删除后 `on_hover` 与 `on_key` 都是 O(1) 游标操作，唯一剩余的 O(N) 是 `_nearest_point_from_px` 本身（有 disp 缓存）。
+
+键盘目标在 figure 范围内由 `FigureDispatcher.keyboard_controller` 单独记录：仅成功的数据点左键点击、Shift+左键新增或 tooltip 左键点击更新该目标；悬停只更新 `active_controller` 和视觉选择，不改变键盘目标。Left/Right/Home/End 路由到 `keyboard_controller`，因此跨面板悬停也不会劫持最近点击游标的键盘导航。双击在应用首次单击前保存该目标，并随游标状态一同恢复，避免双击最大化意外改变键盘目标。
 
 ### D5：测试基线的重写策略
 

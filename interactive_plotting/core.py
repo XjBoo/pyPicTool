@@ -309,7 +309,7 @@ class DataCursor:
                     self._dragging_cursor = cursor
                     self._drag_start_mouse = (event.x, event.y)
                     self._drag_start_position = cursor.tooltip.get_position()
-                    return
+                    return cursor
 
         if event.inaxes != self.ax:
             return
@@ -578,6 +578,7 @@ class PendingAxesClick:
     axis: Axes
     snapshots: tuple[tuple[DataCursor, DataCursor.StateSnapshot], ...]
     previous_active_controller: DataCursor | None
+    previous_keyboard_controller: DataCursor | None
 
 
 class FigureDispatcher:
@@ -598,6 +599,7 @@ class FigureDispatcher:
             if (legend := axis.get_legend()) is not None
         )
         self.active_controller: DataCursor | None = None
+        self.keyboard_controller: DataCursor | None = None
         self.dragging_controller: DataCursor | None = None
         self.dragging_legend: Legend | None = None
         self.layout = AxesLayoutManager(figure, axes)
@@ -687,7 +689,9 @@ class FigureDispatcher:
         if controller is not None:
             self._pending_axes_click = None
             self.active_controller = controller
-            controller.on_click(event)
+            clicked_cursor = controller.on_click(event)
+            if clicked_cursor is not None:
+                self.keyboard_controller = controller
             if controller.is_dragging:
                 self.dragging_controller = controller
             return
@@ -708,6 +712,7 @@ class FigureDispatcher:
                 for snapshot_controller, snapshot in pending.snapshots:
                     snapshot_controller.restore_state(snapshot)
                 self.active_controller = pending.previous_active_controller
+                self.keyboard_controller = pending.previous_keyboard_controller
             self._pending_axes_click = None
             self.layout.toggle(controller.ax)
             return
@@ -721,10 +726,12 @@ class FigureDispatcher:
                     for candidate in self.controllers
                 ),
                 previous_active_controller=self.active_controller,
+                previous_keyboard_controller=self.keyboard_controller,
             )
         self.active_controller = controller
         clicked_cursor = controller.on_click(event)
         if clicked_cursor is not None:
+            self.keyboard_controller = controller
             self._hide_all_tooltips(except_cursor=clicked_cursor)
             self.figure.canvas.draw_idle()
         if controller.is_dragging:
@@ -752,8 +759,14 @@ class FigureDispatcher:
                 return
             self.clear_extra_cursors()
             return
-        if self.active_controller is not None:
-            self.active_controller.on_key(event)
+        key = getattr(event, "key", "").lower()
+        controller = (
+            self.keyboard_controller
+            if key in ("left", "right", "home", "end")
+            else self.active_controller
+        )
+        if controller is not None:
+            controller.on_key(event)
 
     def on_draw(self, _event: DrawEvent) -> None:
         for controller in self.controllers:
@@ -799,6 +812,7 @@ class FigureDispatcher:
         for legend in self.legends:
             legend.set_draggable(False)
         self.active_controller = None
+        self.keyboard_controller = None
         self.dragging_controller = None
         self.dragging_legend = None
         self._by_axes.clear()

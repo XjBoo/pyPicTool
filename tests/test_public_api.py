@@ -279,6 +279,7 @@ class InteractivePlotTests(unittest.TestCase):
         state_before = (
             tuple(marker.get_xdata()),
             tuple(marker.get_ydata()),
+            marker.get_visible(),
             marker.get_marker(),
             marker.get_markeredgecolor(),
             tooltip.get_visible(),
@@ -300,6 +301,7 @@ class InteractivePlotTests(unittest.TestCase):
             (
                 tuple(marker.get_xdata()),
                 tuple(marker.get_ydata()),
+                marker.get_visible(),
                 marker.get_marker(),
                 marker.get_markeredgecolor(),
                 tooltip.get_visible(),
@@ -321,6 +323,7 @@ class InteractivePlotTests(unittest.TestCase):
             (
                 tuple(marker.get_xdata()),
                 tuple(marker.get_ydata()),
+                marker.get_visible(),
                 marker.get_marker(),
                 marker.get_markeredgecolor(),
                 tooltip.get_visible(),
@@ -358,6 +361,50 @@ class InteractivePlotTests(unittest.TestCase):
         send_mouse_event(session, "button_press_event", left, 1, 1.0, button=1)
         self.assertEqual(marker.get_xdata()[0], 1)
         self.assertEqual(marker.get_marker(), "s")
+
+    def test_double_click_restores_an_initially_hidden_cursor(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1, 2],
+                    [0.0, 1.0, 2.0],
+                    "left",
+                    panel=(0, 0),
+                    color="red",
+                ),
+                SeriesData(
+                    [0, 1, 2],
+                    [10.0, 11.0, 12.0],
+                    "right",
+                    panel=(0, 1),
+                    color="blue",
+                ),
+            ]
+        )
+        left = session.axes[0]
+        controller = session.controllers[0]
+        cursor = controller.cursors[0]
+        marker = cursor.highlight
+        tooltip = cursor.tooltip
+        self.assertFalse(marker.get_visible())
+        self.assertFalse(cursor.locked)
+        self.assertFalse(tooltip.get_visible())
+
+        send_mouse_event(
+            session, "button_press_event", left, 1, 1.0, button=1, dblclick=False
+        )
+        send_mouse_event(
+            session, "button_press_event", left, 1, 1.0, button=1, dblclick=True
+        )
+
+        self.assertFalse(marker.get_visible())
+        self.assertEqual(marker.get_xdata()[0], 0)
+        self.assertEqual(marker.get_ydata()[0], 0.0)
+        self.assertFalse(cursor.locked)
+        self.assertEqual(marker.get_marker(), "o")
+        self.assertFalse(tooltip.get_visible())
 
     def test_double_click_restores_the_previous_figure_tooltip(self):
         from interactive_plotting import create_interactive_plot
@@ -637,35 +684,83 @@ class InteractivePlotTests(unittest.TestCase):
         figure.canvas.draw()
         x_pixel, y_pixel = axis.transData.transform((14, 1.0))
         event = MouseEvent("motion_notify_event", figure.canvas, x_pixel, y_pixel)
+        highlights = cursor_highlights(axis)
+        non_hit_positions = {
+            color: (
+                tuple(highlights[color].get_xdata()),
+                tuple(highlights[color].get_ydata()),
+            )
+            for color in ("blue", "green")
+        }
 
         figure.canvas.callbacks.process("motion_notify_event", event)
 
-        highlights = cursor_highlights(axis)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
         self.assertTrue(highlights["red"].get_visible())
-        self.assertFalse(highlights["blue"].get_visible())
-        self.assertFalse(highlights["green"].get_visible())
+        for color in ("blue", "green"):
+            with self.subTest(color=color):
+                self.assertEqual(
+                    (
+                        tuple(highlights[color].get_xdata()),
+                        tuple(highlights[color].get_ydata()),
+                    ),
+                    non_hit_positions[color],
+                )
+                self.assertFalse(highlights[color].get_visible())
 
     def test_hover_requires_a_hit_within_the_shared_radius(self):
         from interactive_plotting import create_interactive_plot
 
-        session = create_interactive_plot(
-            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
-        )
-        axis = session.axes[0]
-        marker = cursor_highlights(axis)["red"]
-        session.figure.canvas.draw()
-        x_pixel, y_pixel = axis.transData.transform((0, 0.0))
+        for interaction in ("hover", "click"):
+            for offset, should_hit in ((5.9, True), (6.0, True), (6.1, False)):
+                with self.subTest(
+                    interaction=interaction, offset=offset, should_hit=should_hit
+                ):
+                    session = create_interactive_plot(
+                        [
+                            SeriesData(
+                                [0, 1, 2],
+                                [0.0, 1.0, 2.0],
+                                "sample",
+                                color="red",
+                            )
+                        ]
+                    )
+                    axis = session.axes[0]
+                    controller = session.controllers[0]
+                    cursor = controller.cursors[0]
+                    marker = cursor.highlight
+                    session.figure.canvas.draw()
+                    x_pixel, y_pixel = axis.transData.transform((1, 1.0))
+                    event_name = (
+                        "motion_notify_event"
+                        if interaction == "hover"
+                        else "button_press_event"
+                    )
+                    event = MouseEvent(
+                        event_name,
+                        session.figure.canvas,
+                        x_pixel,
+                        y_pixel,
+                        button=1 if interaction == "click" else None,
+                    )
+                    event.x = x_pixel + offset
+                    event.y = y_pixel
+                    event.inaxes = axis
 
-        send_canvas_mouse_event(
-            session, "motion_notify_event", x_pixel + 8.0, y_pixel
-        )
-        self.assertFalse(marker.get_visible())
-        self.assertEqual(marker.get_xdata()[0], 0)
+                    result = (
+                        controller.on_hover(event)
+                        if interaction == "hover"
+                        else controller.on_click(event)
+                    )
 
-        send_canvas_mouse_event(session, "motion_notify_event", x_pixel, y_pixel)
-        self.assertTrue(marker.get_visible())
-        self.assertEqual(marker.get_xdata()[0], 0)
+                    self.assertEqual(marker.get_visible(), should_hit)
+                    self.assertEqual(marker.get_xdata()[0], 1 if should_hit else 0)
+                    if interaction == "click":
+                        self.assertEqual(result is not None, should_hit)
+                        self.assertEqual(cursor.locked, should_hit)
+                        self.assertEqual(cursor.tooltip.get_visible(), should_hit)
+                    session.close()
 
     def test_overlapping_hits_highlight_only_the_closest_series(self):
         from interactive_plotting import create_interactive_plot
@@ -996,6 +1091,102 @@ class InteractivePlotTests(unittest.TestCase):
         highlights = cursor_highlights(axis)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
         self.assertEqual(highlights["blue"].get_xdata()[0], 0)
+
+    def test_keyboard_target_is_figure_wide_across_hovered_panels(self):
+        from interactive_plotting import create_interactive_plot
+
+        for right_has_older_click in (False, True):
+            with self.subTest(right_has_older_click=right_has_older_click):
+                session = create_interactive_plot(
+                    [
+                        SeriesData(
+                            [0, 1, 2],
+                            [0.0, 1.0, 2.0],
+                            "left",
+                            panel=(0, 0),
+                            color="red",
+                        ),
+                        SeriesData(
+                            [0, 1, 2],
+                            [10.0, 11.0, 12.0],
+                            "right",
+                            panel=(0, 1),
+                            color="blue",
+                        ),
+                    ]
+                )
+                left, right = session.axes
+                if right_has_older_click:
+                    send_mouse_event(
+                        session,
+                        "button_press_event",
+                        right,
+                        0,
+                        10.0,
+                        button=1,
+                    )
+                send_mouse_event(
+                    session, "button_press_event", left, 0, 0.0, button=1
+                )
+
+                send_mouse_event(session, "motion_notify_event", right, 0, 10.0)
+                send_key_event(session, "right")
+
+                self.assertEqual(cursor_highlights(left)["red"].get_xdata()[0], 1)
+                self.assertEqual(cursor_highlights(right)["blue"].get_xdata()[0], 0)
+                session.close()
+
+    def test_clicking_a_tooltip_makes_its_panel_the_keyboard_target(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1, 2],
+                    [0.0, 1.0, 2.0],
+                    "left",
+                    panel=(0, 0),
+                    color="red",
+                ),
+                SeriesData(
+                    [0, 1, 2],
+                    [10.0, 11.0, 12.0],
+                    "right",
+                    panel=(0, 1),
+                    color="blue",
+                ),
+            ]
+        )
+        left, right = session.axes
+        send_mouse_event(session, "button_press_event", right, 0, 10.0, button=1)
+        send_mouse_event(session, "button_press_event", left, 0, 0.0, button=1)
+
+        right_tooltip = right.texts[0]
+        right_tooltip.set_visible(True)
+        session.figure.canvas.draw()
+        bbox = right_tooltip.get_window_extent(session.figure.canvas.get_renderer())
+        tooltip_x = bbox.x0 + bbox.width / 2
+        tooltip_y = bbox.y0 + bbox.height / 2
+        send_canvas_mouse_event(
+            session,
+            "button_press_event",
+            tooltip_x,
+            tooltip_y,
+            button=1,
+        )
+        send_canvas_mouse_event(
+            session,
+            "button_release_event",
+            tooltip_x,
+            tooltip_y,
+            button=1,
+        )
+
+        send_mouse_event(session, "motion_notify_event", left, 0, 0.0)
+        send_key_event(session, "right")
+
+        self.assertEqual(cursor_highlights(left)["red"].get_xdata()[0], 0)
+        self.assertEqual(cursor_highlights(right)["blue"].get_xdata()[0], 1)
 
     def test_keyboard_movement_carries_the_visible_tooltip_with_the_cursor(self):
         from interactive_plotting import create_interactive_plot
