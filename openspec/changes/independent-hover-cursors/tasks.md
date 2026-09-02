@@ -7,6 +7,7 @@
 
 - [x] 2.1 `Cursor.__init__` 创建标记后 `set_visible(False)`；`on_hover` 命中且未锁定时显示该游标；新增 `_hide_transient_highlights()`（隐藏所有未锁定游标），在悬停无命中与 `inaxes` 不匹配时调用（D2/D3）。验证：新增用例"初始状态无任何游标可见""鼠标移开后未锁定游标隐藏""锁定游标不受移开影响"通过
 - [x] 2.2 `CursorState` 增加 `marker_visible` 字段，`capture_state`/`restore_state` 保存与恢复标记可见性（D3）。验证：既有双击还原用例（`test_double_click_maximizes_without_applying_the_first_single_click`、`test_double_click_restores_the_previous_figure_tooltip`、`test_double_click_preserves_the_selected_controller_for_keyboard_input`）全部通过
+- [x] 2.3 为“键盘移动时未锁定游标可见”增加直接防回归测试：点击解锁游标，移出命中范围使其隐藏，再按方向键，断言游标移动到新位置并重新可见（D3）。验证：`test_keyboard_reshows_hidden_unlocked_clicked_cursor` 通过
 
 ## 3. 删除同步机制
 

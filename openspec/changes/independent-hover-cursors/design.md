@@ -19,7 +19,7 @@
 
 ### D3：瞬态可见性的状态规则
 
-游标标记可见当且仅当：`cursor.locked` 为真（点击锚定/Shift+左键新增持久可见），或该游标正被悬停命中（未锁定，当前高亮）。实现为三处赋值：`Cursor.__init__` 创建后 `set_visible(False)`；`on_hover` 命中且未锁定时 `set_visible(True)`；`_hide_transient_highlights()` 中对未锁定游标 `set_visible(False)`。`CursorState` 增加 `marker_visible` 字段，`capture_state`/`restore_state` 保存与恢复可见性，保证双击还原、`clear_extra_cursors` 等快照路径不破坏瞬态规则（恢复后重新按 locked 规则计算亦可，但显式快照更直接且与既有快照字段风格一致）。
+游标标记在以下状态可见：`cursor.locked` 为真（点击锚定/Shift+左键新增，持久可见）、该游标正被悬停命中（未锁定，当前高亮），或键盘正在移动一个点击锚定的未锁定游标（移动后重新显示）。其余时刻未锁定游标隐藏。实现的主要赋值点为：`Cursor.__init__` 创建后 `set_visible(False)`；`on_hover` 命中且未锁定时 `set_visible(True)`；点击命中时显示被锚定游标；`on_key` 成功移动后 `set_visible(True)`；`_hide_transient_highlights()` 中对未锁定游标 `set_visible(False)`。`CursorState` 增加 `marker_visible` 字段，`capture_state`/`restore_state` 保存与恢复可见性，保证双击还原、`clear_extra_cursors` 等快照路径不破坏瞬态规则（恢复后重新按 locked 规则计算亦可，但显式快照更直接且与既有快照字段风格一致）。
 
 ### D4：删除同步机制
 

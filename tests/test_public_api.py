@@ -928,6 +928,28 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(highlights["blue"].get_xdata()[0], 4)
         self.assertEqual(highlights["red"].get_xdata()[0], 14)
 
+    def test_keyboard_reshows_hidden_unlocked_clicked_cursor(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        marker = cursor_highlights(axis)["red"]
+
+        # Click twice to leave the cursor unlocked but anchored for keyboard input.
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        self.assertTrue(marker.get_visible())
+
+        send_mouse_event(session, "motion_notify_event", axis, 1.5, 1.5)
+        self.assertFalse(marker.get_visible())
+
+        send_key_event(session, "right")
+
+        self.assertEqual(marker.get_xdata()[0], 1)
+        self.assertTrue(marker.get_visible())
+
     def test_keyboard_requires_a_click_selected_cursor(self):
         from interactive_plotting import create_interactive_plot
 
