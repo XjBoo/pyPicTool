@@ -436,6 +436,50 @@ class InteractivePlotTests(unittest.TestCase):
         ]
         self.assertEqual(visible_tooltips, [right.texts[0]])
 
+    def test_double_click_restores_active_series_identity_and_visuals(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "red", color="red"),
+                SeriesData(
+                    [0, 1, 2], [10.0, 11.0, 12.0], "blue", color="blue"
+                ),
+            ]
+        )
+        axis = session.axes[0]
+        controller = session.controllers[0]
+        send_mouse_event(session, "button_press_event", axis, 1, 1.0, button=1)
+        active = controller.active_selection
+
+        send_mouse_event(
+            session,
+            "button_press_event",
+            axis,
+            1,
+            11.0,
+            button=1,
+            dblclick=False,
+        )
+        send_mouse_event(
+            session,
+            "button_press_event",
+            axis,
+            1,
+            11.0,
+            button=1,
+            dblclick=True,
+        )
+
+        self.assertIs(controller.active_selection, active)
+        self.assertEqual(active.series_idx, 0)
+        self.assertEqual(active.color, "red")
+        self.assertEqual(active.highlight.get_color(), "red")
+        self.assertEqual(active.highlight.get_xdata()[0], 1)
+        self.assertEqual(active.highlight.get_ydata()[0], 1.0)
+        self.assertEqual(active.tooltip.xy, (1, 1.0))
+        self.assertIn("Value: 1", active.tooltip.get_text())
+
     def test_double_click_preserves_the_selected_controller_for_keyboard_input(self):
         from interactive_plotting import create_interactive_plot
 
@@ -1432,6 +1476,95 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(default.get_xdata()[0], 0)
         self.assertEqual(extra.get_xdata()[0], 0)
         self.assertEqual(cursor_highlights(right)["blue"].get_xdata()[0], 1)
+
+    def test_cross_panel_click_keeps_one_keyboard_target_and_visual_focus(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1], [0.0, 1.0], "left", panel=(0, 0), color="red"
+                ),
+                SeriesData(
+                    [0, 1], [10.0, 11.0], "right", panel=(0, 1), color="blue"
+                ),
+            ]
+        )
+        left, right = session.axes
+        left_controller, right_controller = session.controllers
+        send_mouse_event(session, "button_press_event", left, 0, 0.0, button=1)
+        left_active = left_controller.active_selection
+        send_mouse_event(
+            session,
+            "button_press_event",
+            right,
+            0,
+            10.0,
+            button=1,
+            key="shift",
+        )
+        right_pin = right_controller.pinned_selections[0]
+
+        self.assertIsNone(left_controller.keyboard_target)
+        self.assertIs(right_controller.keyboard_target, right_pin)
+        self.assertEqual(left_active.highlight.get_markersize(), 8)
+        self.assertEqual(left_active.highlight.get_markeredgecolor(), "red")
+        self.assertEqual(right_pin.highlight.get_markersize(), 10)
+        self.assertEqual(right_pin.highlight.get_markeredgecolor(), "gold")
+
+        session.figure.canvas.draw()
+        bbox = left_active.tooltip.get_window_extent(
+            session.figure.canvas.get_renderer()
+        )
+        send_canvas_mouse_event(
+            session,
+            "button_press_event",
+            bbox.x0 + bbox.width / 2,
+            bbox.y0 + bbox.height / 2,
+            button=1,
+        )
+        send_canvas_mouse_event(
+            session,
+            "button_release_event",
+            bbox.x0 + bbox.width / 2,
+            bbox.y0 + bbox.height / 2,
+            button=1,
+        )
+
+        self.assertIs(left_controller.keyboard_target, left_active)
+        self.assertIsNone(right_controller.keyboard_target)
+        self.assertEqual(left_active.highlight.get_markeredgecolor(), "gold")
+        self.assertEqual(right_pin.highlight.get_markeredgecolor(), "blue")
+
+    def test_delete_uses_clicked_pin_after_hovering_another_panel(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData(
+                    [0, 1], [0.0, 1.0], "left", panel=(0, 0), color="red"
+                ),
+                SeriesData(
+                    [0, 1], [10.0, 11.0], "right", panel=(0, 1), color="blue"
+                ),
+            ]
+        )
+        left, right = session.axes
+        left_controller = session.controllers[0]
+        send_mouse_event(
+            session,
+            "button_press_event",
+            left,
+            0,
+            0.0,
+            button=1,
+            key="shift",
+        )
+
+        send_mouse_event(session, "motion_notify_event", right, 0, 10.0)
+        send_key_event(session, "delete")
+
+        self.assertEqual(left_controller.pinned_selections, ())
 
     def test_clicking_a_tooltip_makes_its_panel_the_keyboard_target(self):
         from interactive_plotting import create_interactive_plot

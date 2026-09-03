@@ -102,6 +102,8 @@ class DataCursor:
     class CursorState:
         cursor: DataCursor.Cursor
         current_index: int
+        series_idx: int
+        color: str
         role: str
         marker_visible: bool
         tooltip_visible: bool
@@ -196,6 +198,14 @@ class DataCursor:
         if cursor is not None:
             cursor.apply_style(True)
         return True
+
+    def clear_keyboard_focus(self) -> bool:
+        """Relinquish this panel's clicked target and persistent focus style."""
+
+        changed = self._keyboard_target is not None or self._selected is not None
+        self._keyboard_target = None
+        self._select_cursor(None)
+        return changed
 
     def _invalidate_disp_cache(self, _event: Axes | None = None) -> None:
         self._disp_cache_valid = False
@@ -541,6 +551,8 @@ class DataCursor:
                 DataCursor.CursorState(
                     cursor=cursor,
                     current_index=cursor.current_index,
+                    series_idx=cursor.series_idx,
+                    color=cursor.color,
                     role=cursor.role,
                     marker_visible=cursor.highlight.get_visible(),
                     tooltip_visible=cursor.tooltip.get_visible(),
@@ -577,6 +589,9 @@ class DataCursor:
                 self.ax.add_line(cursor.highlight)
             if cursor.tooltip.axes is None:
                 self.ax.add_artist(cursor.tooltip)
+            cursor.series_idx = state.series_idx
+            cursor.color = state.color
+            cursor.highlight.set_color(state.color)
             cursor.role = state.role
             self._update_cursor_visuals(
                 cursor, state.current_index, show_tooltip=False
@@ -747,6 +762,21 @@ class FigureDispatcher:
         toolbar = getattr(manager, "toolbar", None)
         return bool(getattr(toolbar, "mode", ""))
 
+    def _set_keyboard_controller(self, controller: DataCursor | None) -> None:
+        previous = self.keyboard_controller
+        if previous is controller:
+            return
+        if previous is not None:
+            previous.clear_keyboard_focus()
+        self.keyboard_controller = controller
+
+    def _sync_keyboard_controller(self, controller: DataCursor) -> None:
+        if (
+            self.keyboard_controller is controller
+            and controller.keyboard_target is None
+        ):
+            self.keyboard_controller = None
+
     def _legend_at(self, event: MouseEvent) -> Legend | None:
         return next(
             (
@@ -811,7 +841,9 @@ class FigureDispatcher:
             self.active_controller = controller
             clicked_cursor = controller.on_click(event)
             if clicked_cursor is not None:
-                self.keyboard_controller = controller
+                self._set_keyboard_controller(controller)
+            else:
+                self._sync_keyboard_controller(controller)
             if controller.is_dragging:
                 self.dragging_controller = controller
             return
@@ -855,8 +887,10 @@ class FigureDispatcher:
                 for candidate in self.controllers:
                     if candidate is not controller:
                         candidate.clear_active()
-            self.keyboard_controller = controller
+            self._set_keyboard_controller(controller)
             self.figure.canvas.draw_idle()
+        else:
+            self._sync_keyboard_controller(controller)
         if controller.is_dragging:
             self.dragging_controller = controller
 
@@ -885,11 +919,13 @@ class FigureDispatcher:
         key = getattr(event, "key", "").lower()
         controller = (
             self.keyboard_controller
-            if key in ("left", "right", "home", "end")
+            if key
+            in ("left", "right", "home", "end", "delete", "backspace")
             else self.active_controller
         )
         if controller is not None:
             controller.on_key(event)
+            self._sync_keyboard_controller(controller)
 
     def on_draw(self, _event: DrawEvent) -> None:
         for controller in self.controllers:
@@ -899,9 +935,12 @@ class FigureDispatcher:
         self.disconnect()
 
     def remove_selected_cursor(self) -> bool:
-        if self.active_controller is None:
+        controller = self.keyboard_controller
+        if controller is None:
             return False
-        return self.active_controller.remove_selected_cursor()
+        removed = controller.remove_selected_cursor()
+        self._sync_keyboard_controller(controller)
+        return removed
 
     def clear_extra_cursors(self) -> int:
         removed = sum(
