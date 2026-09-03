@@ -328,7 +328,8 @@ class DataCursor:
         cursor.tooltip.remove()
         self._pinned.remove(cursor)
         if was_selected:
-            self._select_cursor(self.active_selection)
+            self._select_cursor(None)
+        self._reconcile_hover_visuals()
         if request_draw:
             self.fig.canvas.draw_idle()
 

@@ -906,6 +906,41 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertTrue(active.get_visible())
         self.assertEqual(active.get_xdata()[0], 1)
 
+    def test_pinned_selection_persists_during_same_and_cross_series_hover(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [
+                SeriesData([0, 1], [0.0, 1.0], "red", color="red"),
+                SeriesData([0, 1], [10.0, 11.0], "blue", color="blue"),
+            ]
+        )
+        axis = session.axes[0]
+        controller = session.controllers[0]
+        send_mouse_event(
+            session,
+            "button_press_event",
+            axis,
+            1,
+            1.0,
+            button=1,
+            key="shift",
+        )
+        pinned = controller.pinned_selections[0]
+        pinned_position = tuple(pinned.tooltip.xy)
+
+        for x_value, y_value, color in ((0, 0.0, "red"), (0, 10.0, "blue")):
+            with self.subTest(color=color):
+                send_mouse_event(
+                    session, "motion_notify_event", axis, x_value, y_value
+                )
+                self.assertTrue(controller.hover_highlight.get_visible())
+                self.assertEqual(controller.hover_highlight.get_color(), color)
+                self.assertEqual(pinned.current_index, 1)
+                self.assertEqual(tuple(pinned.tooltip.xy), pinned_position)
+                self.assertTrue(pinned.highlight.get_visible())
+                self.assertTrue(pinned.tooltip.get_visible())
+
     def test_motion_away_from_a_panel_hides_only_its_transient_marker(self):
         from interactive_plotting import create_interactive_plot
 
@@ -1139,6 +1174,9 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(controller.pinned_selections, (first_pin,))
         self.assertTrue(active.highlight.get_visible())
         self.assertTrue(active.tooltip.get_visible())
+        self.assertIsNone(controller.keyboard_target)
+        self.assertEqual(active.highlight.get_markersize(), 8)
+        self.assertEqual(active.highlight.get_markeredgecolor(), "red")
         self.assertTrue(first_pin.highlight.get_visible())
         self.assertTrue(first_pin.tooltip.get_visible())
         self.assertNotIn(second_pin.highlight, axis.lines)
@@ -1222,6 +1260,9 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertIs(controller.active_selection, active)
         self.assertTrue(active.highlight.get_visible())
         self.assertTrue(active.tooltip.get_visible())
+        self.assertIsNone(controller.keyboard_target)
+        self.assertEqual(active.highlight.get_markersize(), 8)
+        self.assertEqual(active.highlight.get_markeredgecolor(), "red")
 
         send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
         self.assertIsNone(controller.active_selection)

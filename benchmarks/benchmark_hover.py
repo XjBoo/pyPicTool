@@ -61,6 +61,17 @@ def measure(
         canvas = session.figure.canvas
         axis = session.controllers[0].ax
         canvas.draw()
+        pin_x, pin_y = axis.transData.transform((0.0, 0.0))
+        pin_event = MouseEvent(
+            "button_press_event",
+            canvas,
+            pin_x,
+            pin_y,
+            button=1,
+            key="shift",
+        )
+        canvas.callbacks.process("button_press_event", pin_event)
+        canvas.draw()
         sample_indices = np.linspace(0, points - 1, event_count, dtype=int)
         events = []
         for index in sample_indices:
@@ -94,6 +105,7 @@ def measure(
         "series": panels * 2,
         "events": event_count,
         "repeats": repeats,
+        "pinned_per_measured_panel": 1,
         "render_included": include_render,
         "median_seconds": statistics.median(timings),
         "all_seconds": timings,
