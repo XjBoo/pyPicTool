@@ -121,7 +121,6 @@ class DataCursor:
         hover_series_idx: int
         hover_index: int
         hover_active: bool
-        hover_visible: bool
 
     def __init__(self, ax: Axes, series_list: Sequence[SeriesData]) -> None:
         self.ax = ax
@@ -205,6 +204,7 @@ class DataCursor:
         changed = self._keyboard_target is not None or self._selected is not None
         self._keyboard_target = None
         self._select_cursor(None)
+        self._reconcile_hover_visuals()
         return changed
 
     def _invalidate_disp_cache(self, _event: Axes | None = None) -> None:
@@ -282,6 +282,30 @@ class DataCursor:
             ):
                 return cursor
         return None
+
+    def _reconcile_hover_visuals(self) -> None:
+        """Derive hover preview visibility and persistent marker focus."""
+
+        overlap = (
+            self._selection_at(self._hover_series_idx, self._hover_index)
+            if self._hover_active
+            else None
+        )
+        for cursor in self.cursors:
+            cursor.apply_style(cursor is self._selected or cursor is overlap)
+
+        if not self._hover_active or overlap is not None:
+            self.hover_highlight.set_visible(False)
+            return
+
+        series = self.series_list[self._hover_series_idx]
+        self.hover_highlight.set_data(
+            [series.frames[self._hover_index]],
+            [series.values[self._hover_index]],
+        )
+        self.hover_highlight.set_color(series.color)
+        self.hover_highlight.set_markeredgecolor("gold")
+        self.hover_highlight.set_visible(True)
 
     def _pinned_at(self, series_idx: int, local_idx: int) -> Cursor | None:
         return next(
@@ -521,6 +545,7 @@ class DataCursor:
             selected_idx = int(valid_indices[new_position])
             self._update_cursor_visuals(cursor, selected_idx, show_tooltip=True)
             cursor.highlight.set_visible(True)
+            self._reconcile_hover_visuals()
             self.fig.canvas.draw_idle()
 
     def remove_selected_cursor(self) -> bool:
@@ -569,7 +594,6 @@ class DataCursor:
             hover_series_idx=self._hover_series_idx,
             hover_index=self._hover_index,
             hover_active=self._hover_active,
-            hover_visible=self.hover_highlight.get_visible(),
         )
 
     def restore_state(self, snapshot: StateSnapshot) -> None:
@@ -605,14 +629,7 @@ class DataCursor:
         self._hover_series_idx = snapshot.hover_series_idx
         self._hover_index = snapshot.hover_index
         self._hover_active = snapshot.hover_active
-        hover_series = self.series_list[self._hover_series_idx]
-        self.hover_highlight.set_data(
-            [hover_series.frames[self._hover_index]],
-            [hover_series.values[self._hover_index]],
-        )
-        self.hover_highlight.set_color(hover_series.color)
-        self.hover_highlight.set_markeredgecolor("gold")
-        self.hover_highlight.set_visible(snapshot.hover_visible)
+        self._reconcile_hover_visuals()
         self._dragging_cursor = None
         self._drag_start_mouse = None
         self._drag_start_position = None

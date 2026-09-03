@@ -480,6 +480,70 @@ class InteractivePlotTests(unittest.TestCase):
         self.assertEqual(active.tooltip.xy, (1, 1.0))
         self.assertIn("Value: 1", active.tooltip.get_text())
 
+    def test_double_click_restores_hover_focus_on_a_pinned_point(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        controller = session.controllers[0]
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        active = controller.active_selection
+        send_mouse_event(
+            session,
+            "button_press_event",
+            axis,
+            1,
+            1.0,
+            button=1,
+            key="shift",
+        )
+        pinned = controller.pinned_selections[0]
+
+        session.figure.canvas.draw()
+        bbox = active.tooltip.get_window_extent(session.figure.canvas.get_renderer())
+        send_canvas_mouse_event(
+            session,
+            "button_press_event",
+            bbox.x0 + bbox.width / 2,
+            bbox.y0 + bbox.height / 2,
+            button=1,
+        )
+        send_canvas_mouse_event(
+            session,
+            "button_release_event",
+            bbox.x0 + bbox.width / 2,
+            bbox.y0 + bbox.height / 2,
+            button=1,
+        )
+        send_mouse_event(session, "motion_notify_event", axis, 1, 1.0)
+        self.assertEqual(pinned.highlight.get_markeredgecolor(), "gold")
+
+        send_mouse_event(
+            session,
+            "button_press_event",
+            axis,
+            1,
+            1.0,
+            button=1,
+            dblclick=False,
+        )
+        send_mouse_event(
+            session,
+            "button_press_event",
+            axis,
+            1,
+            1.0,
+            button=1,
+            dblclick=True,
+        )
+
+        self.assertEqual(controller.pinned_selections, (pinned,))
+        self.assertFalse(controller.hover_highlight.get_visible())
+        self.assertEqual(pinned.highlight.get_markersize(), 10)
+        self.assertEqual(pinned.highlight.get_markeredgecolor(), "gold")
+
     def test_double_click_preserves_the_selected_controller_for_keyboard_input(self):
         from interactive_plotting import create_interactive_plot
 
@@ -1342,6 +1406,26 @@ class InteractivePlotTests(unittest.TestCase):
 
         self.assertEqual(marker.get_xdata()[0], 1)
         self.assertTrue(marker.get_visible())
+
+    def test_keyboard_move_into_hovered_point_uses_one_highlight(self):
+        from interactive_plotting import create_interactive_plot
+
+        session = create_interactive_plot(
+            [SeriesData([0, 1, 2], [0.0, 1.0, 2.0], "sample", color="red")]
+        )
+        axis = session.axes[0]
+        controller = session.controllers[0]
+        send_mouse_event(session, "button_press_event", axis, 0, 0.0, button=1)
+        send_mouse_event(session, "motion_notify_event", axis, 1, 1.0)
+        self.assertTrue(controller.hover_highlight.get_visible())
+
+        send_key_event(session, "right")
+
+        active = controller.active_selection
+        self.assertEqual(active.current_index, 1)
+        self.assertFalse(controller.hover_highlight.get_visible())
+        self.assertEqual(active.highlight.get_markersize(), 10)
+        self.assertEqual(active.highlight.get_markeredgecolor(), "gold")
 
     def test_keyboard_requires_a_click_selected_cursor(self):
         from interactive_plotting import create_interactive_plot

@@ -40,25 +40,26 @@ about the future business-data interface.
 
 ## Interaction
 
-- Hover highlights only the series whose data point lies within the shared hit
-  radius (6 px, the same radius clicks use): that series' unlocked cursor
-  becomes visible, snaps to the point, and takes the gold selection. Series
-  are independent — hovering never moves or reveals another series' cursor.
-  Beyond the radius from every point there is no highlight at all; an
-  unlocked cursor hides again once the mouse leaves the radius, and the
-  figure starts with every cursor hidden. Locked cursors stay visible.
-- Left click selects that series' permanent default cursor, toggles its locked
-  state, and shows the figure's only tooltip at the clicked point. The next
-  data-point click replaces that tooltip, including across subplots. Locked
-  cursors ignore mouse-hover following but stay keyboard-navigable while
-  selected.
-- Shift+left click adds a locked extra cursor. Delete/Backspace removes the
-  selected extra cursor. Default cursors cannot be deleted.
+- Hover shows one transient circular preview on the nearest data point within
+  the shared 6 px hit radius. It has no tooltip and remains independent of all
+  persistent selections, including other points on the same series. Hovering
+  an already selected point reuses that point's marker instead of drawing a
+  duplicate, and moving away hides only the preview.
+- Left click creates the figure's single active selection with a circular
+  marker and tooltip. Clicking a different unpinned point replaces the active
+  selection across series and subplots; clicking the active point again
+  cancels it. Existing pinned selections are preserved.
+- Shift+left click adds a pinned circular marker and tooltip, and any number of
+  pins may remain visible across panels. Left-click a pinned point to remove
+  only that pin; Delete/Backspace removes the clicked pin, and Esc clears all
+  pins when no axes is maximized. `remove_selected_cursor()` and
+  `clear_extra_cursors()` expose the same single/all-pin operations.
 - Left/Right and Home/End move only the cursor anchored by the last left
   click (a data-point click, a Shift+left-click extra cursor, or a click on
-  its tooltip), whether it is locked or not, without moving any other
-  series' cursor. Hovering moves the gold selection but never the keyboard
-  target. While a session is active, Left/Right/Home/Backspace are detached
+  its tooltip), without moving any other selection. Hovering never changes
+  the keyboard target. The most recently clicked selection is the only
+  persistent marker with the gold focus style. While a session is active,
+  Left/Right/Home/Backspace are detached
   from the Matplotlib navigation toolbar's view history; the default
   bindings return once the last session disconnects.
 - Drag a visible tooltip to reposition its text. Cursor interaction pauses
@@ -68,17 +69,16 @@ about the future business-data interface.
   layout. Programmatic switching restores the previous axes before maximizing
   the next one.
 - While an axes is maximized, Esc restores the six-panel layout and preserves
-  extra cursors. Outside maximized mode, Esc clears all extra cursors.
+  pinned selections. Outside maximized mode, Esc clears all pins.
 - Drag anywhere on a legend box or its labels to reposition the whole legend.
   Legend and tooltip gestures take priority over subplot maximization.
 
-Tooltips stay hidden during initialization and hover. A data-point left click
-shows one white tooltip containing only `Frame` and `Value`, both formatted by
-the corresponding axis formatter. Hover never moves a tooltip; keyboard
-movement of the clicked cursor carries its visible tooltip to the new point
-and refreshes the values. Cursors use only point markers and tooltips. A gold
-marker edge identifies the selected cursor, while a square marker identifies
-a locked cursor.
+Tooltips stay hidden during initialization and hover. Active and pinned
+selections each show a white tooltip containing only `Frame` and `Value`, both
+formatted by the corresponding axis formatter. Hover never moves a tooltip;
+keyboard movement of the clicked selection carries its tooltip to the new
+point and refreshes the values. All cursor markers are circular; marker size
+and a gold edge identify the current click or hover focus.
 
 ## GUI stack
 
