@@ -56,22 +56,12 @@ def _restore_view_navigation_keys() -> None:
 
 
 class DataCursor:
-    """
-    自定义游标类（支持多数据系列）：
-    1. 鼠标贴近某个数据点（屏幕像素距离不超过命中阈值）时，
-       仅该系列的游标出现并吸附到该点。
-    2. 各系列游标完全独立：悬停不移动、不显示其他系列，
-       键盘移动也不跨系列同步。
-    3. 方向键及 Home/End 键精确移动左键点击选中的游标
-       （锁定与否皆可；悬停选中的游标不响应键盘）。
-    4. 每个系列有一个默认游标，Shift+左键可新增锁定游标；
-       未锁定的游标仅在悬停贴近时可见。
-    """
+    """Manage independent hover, active, and pinned point selections."""
 
     _HIT_RADIUS_PIXELS = 6.0
 
     class Cursor:
-        """单个游标实例（高亮点 + tooltip）。"""
+        """A persistent active or pinned point and its tooltip."""
 
         def __init__(
             self,
@@ -79,14 +69,13 @@ class DataCursor:
             x0: float,
             y0: float,
             series_idx: int,
-            color: str = "red",
-            is_default: bool = True,
+            color: str,
+            role: str,
         ) -> None:
             self.ax = ax
             self.series_idx = series_idx
             self.current_index = 0
-            self.locked = False
-            self.is_default = is_default
+            self.role = role
             self.color = color
 
             (self.highlight,) = ax.plot(
@@ -104,7 +93,7 @@ class DataCursor:
             )
 
         def apply_style(self, selected: bool) -> None:
-            self.highlight.set_marker("s" if self.locked else "o")
+            self.highlight.set_marker("o")
             self.highlight.set_markersize(10 if selected else 8)
             self.highlight.set_markeredgecolor("gold" if selected else self.color)
             self.highlight.set_markeredgewidth(2 if selected else 1)
@@ -113,7 +102,7 @@ class DataCursor:
     class CursorState:
         cursor: DataCursor.Cursor
         current_index: int
-        locked: bool
+        role: str
         marker_visible: bool
         tooltip_visible: bool
         tooltip_anchor: tuple[float, float]
@@ -123,8 +112,14 @@ class DataCursor:
     @dataclass(frozen=True, slots=True)
     class StateSnapshot:
         cursors: tuple[DataCursor.CursorState, ...]
+        active: DataCursor.Cursor | None
+        pinned: tuple[DataCursor.Cursor, ...]
         selected: DataCursor.Cursor | None
-        click_selected: DataCursor.Cursor | None
+        keyboard_target: DataCursor.Cursor | None
+        hover_series_idx: int
+        hover_index: int
+        hover_active: bool
+        hover_visible: bool
 
     def __init__(self, ax: Axes, series_list: Sequence[SeriesData]) -> None:
         self.ax = ax
@@ -134,23 +129,33 @@ class DataCursor:
         self._disp_cache_valid = False
         self._disp_cache_signature: tuple[float, ...] | None = None
         self._valid_indices_list: list[np.ndarray] = []
+        self._active: DataCursor.Cursor | None = None
+        self._pinned: list[DataCursor.Cursor] = []
         self._selected: DataCursor.Cursor | None = None
-        self._click_selected: DataCursor.Cursor | None = None
+        self._keyboard_target: DataCursor.Cursor | None = None
         self._dragging_cursor: DataCursor.Cursor | None = None
         self._drag_start_mouse: tuple[float, float] | None = None
         self._drag_start_position: tuple[float, float] | None = None
-        self.cursors: list[DataCursor.Cursor] = []
-
-        for series_idx, series in enumerate(self.series_list):
+        for series in self.series_list:
             valid_indices = np.flatnonzero(series.valid_mask)
             self._valid_indices_list.append(valid_indices)
 
-            first_idx = int(valid_indices[0])
-            x0, y0 = series.frames[first_idx], series.values[first_idx]
-            color = series.color
-            cursor = DataCursor.Cursor(ax, x0, y0, series_idx, color)
-            cursor.current_index = first_idx
-            self.cursors.append(cursor)
+        first_idx = int(self._valid_indices_list[0][0])
+        first_series = self.series_list[0]
+        (self.hover_highlight,) = ax.plot(
+            [first_series.frames[first_idx]],
+            [first_series.values[first_idx]],
+            marker="o",
+            color=first_series.color,
+            markersize=10,
+            markeredgecolor="gold",
+            markeredgewidth=2,
+            zorder=6,
+        )
+        self.hover_highlight.set_visible(False)
+        self._hover_series_idx = 0
+        self._hover_index = first_idx
+        self._hover_active = False
 
         self.fig = ax.figure
         self._axis_callback_ids = [
@@ -159,11 +164,27 @@ class DataCursor:
         ]
         self._connected = True
 
-        for cursor in self.cursors:
-            self._update_cursor_visuals(
-                cursor, cursor.current_index, show_tooltip=False
-            )
-            cursor.apply_style(False)
+    @property
+    def cursors(self) -> list[Cursor]:
+        """Persistent selections, retained for session inspection."""
+
+        return ([self._active] if self._active is not None else []) + list(
+            self._pinned
+        )
+
+    @property
+    def active_selection(self) -> Cursor | None:
+        if self._active is None or not self._active.highlight.get_visible():
+            return None
+        return self._active
+
+    @property
+    def pinned_selections(self) -> tuple[Cursor, ...]:
+        return tuple(self._pinned)
+
+    @property
+    def keyboard_target(self) -> Cursor | None:
+        return self._keyboard_target
 
     def _select_cursor(self, cursor: Cursor | None) -> bool:
         previous = self._selected
@@ -225,17 +246,71 @@ class DataCursor:
                 best_local_idx = int(self._disp_indices_list[series_idx][min_idx])
         return best_series_idx, best_local_idx, float(best_d2)
 
-    def _hide_transient_highlights(self, except_cursor: Cursor | None = None) -> bool:
-        """Hide unlocked marker highlights; report whether anything changed."""
+    def hide_hover(self) -> bool:
+        """Hide the transient preview and restore persistent marker styling."""
 
-        changed = False
+        if not self._hover_active:
+            return False
+        self._hover_active = False
+        self.hover_highlight.set_visible(False)
+        overlap = self._selection_at(self._hover_series_idx, self._hover_index)
+        if overlap is not None:
+            overlap.apply_style(overlap is self._selected)
+        return True
+
+    def _hide_transient_highlights(self, except_cursor: Cursor | None = None) -> bool:
+        """Compatibility wrapper for the former transient-cursor helper."""
+
+        return self.hide_hover()
+
+    def _selection_at(self, series_idx: int, local_idx: int) -> Cursor | None:
         for cursor in self.cursors:
-            if cursor is except_cursor or cursor.locked:
-                continue
-            if cursor.highlight.get_visible():
-                cursor.highlight.set_visible(False)
-                changed = True
-        return changed
+            if (
+                cursor.highlight.get_visible()
+                and cursor.series_idx == series_idx
+                and cursor.current_index == local_idx
+            ):
+                return cursor
+        return None
+
+    def _pinned_at(self, series_idx: int, local_idx: int) -> Cursor | None:
+        return next(
+            (
+                cursor
+                for cursor in self._pinned
+                if cursor.series_idx == series_idx
+                and cursor.current_index == local_idx
+            ),
+            None,
+        )
+
+    def _remove_pinned_cursor(
+        self, cursor: Cursor, *, request_draw: bool = True
+    ) -> None:
+        if cursor is self._keyboard_target:
+            self._keyboard_target = None
+        was_selected = cursor is self._selected
+        cursor.highlight.remove()
+        cursor.tooltip.remove()
+        self._pinned.remove(cursor)
+        if was_selected:
+            self._select_cursor(self.active_selection)
+        if request_draw:
+            self.fig.canvas.draw_idle()
+
+    def _new_cursor(self, series_idx: int, local_idx: int, role: str) -> Cursor:
+        series = self.series_list[series_idx]
+        cursor = DataCursor.Cursor(
+            self.ax,
+            series.frames[local_idx],
+            series.values[local_idx],
+            series_idx,
+            series.color,
+            role,
+        )
+        self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
+        cursor.highlight.set_visible(True)
+        return cursor
 
     def _update_cursor_visuals(
         self, cursor: Cursor, local_idx: int, show_tooltip: bool = False
@@ -277,7 +352,7 @@ class DataCursor:
             self.fig.canvas.draw_idle()
             return False
         if event.inaxes is not self.ax:
-            return self._hide_transient_highlights()
+            return self.hide_hover()
         if event.x is None or event.y is None:
             return False
 
@@ -285,19 +360,40 @@ class DataCursor:
             event.x, event.y
         )
         if distance_squared > self._HIT_RADIUS_PIXELS**2:
-            return self._hide_transient_highlights()
+            return self.hide_hover()
 
-        cursor = self.cursors[series_idx]
-        need_draw = self._select_cursor(cursor)
-        if self._hide_transient_highlights(cursor):
-            need_draw = True
-        if not cursor.locked and (
-            not cursor.highlight.get_visible() or cursor.current_index != local_idx
-        ):
-            self._update_cursor_visuals(cursor, local_idx)
-            cursor.highlight.set_visible(True)
-            need_draw = True
-        return need_draw
+        old_point = (self._hover_series_idx, self._hover_index)
+        old_overlap = self._selection_at(
+            self._hover_series_idx, self._hover_index
+        )
+        if old_overlap is not None:
+            old_overlap.apply_style(old_overlap is self._selected)
+
+        self._hover_series_idx = series_idx
+        self._hover_index = local_idx
+        self._hover_active = True
+        overlap = self._selection_at(series_idx, local_idx)
+        if overlap is not None:
+            changed = self.hover_highlight.get_visible()
+            self.hover_highlight.set_visible(False)
+            overlap.apply_style(True)
+            return changed or overlap is not old_overlap or old_point != (
+                series_idx,
+                local_idx,
+            )
+
+        series = self.series_list[series_idx]
+        self.hover_highlight.set_data(
+            [series.frames[local_idx]], [series.values[local_idx]]
+        )
+        self.hover_highlight.set_color(series.color)
+        self.hover_highlight.set_markeredgecolor("gold")
+        changed = not self.hover_highlight.get_visible()
+        self.hover_highlight.set_visible(True)
+        return changed or old_overlap is not None or old_point != (
+            series_idx,
+            local_idx,
+        )
 
     def on_click(self, event: MouseEvent) -> Cursor | None:
         if getattr(event, "button", None) == 1:
@@ -305,7 +401,7 @@ class DataCursor:
                 contains, _ = cursor.tooltip.contains(event)
                 if contains:
                     self._select_cursor(cursor)
-                    self._click_selected = cursor
+                    self._keyboard_target = cursor
                     self._dragging_cursor = cursor
                     self._drag_start_mouse = (event.x, event.y)
                     self._drag_start_position = cursor.tooltip.get_position()
@@ -326,30 +422,59 @@ class DataCursor:
 
         is_shift = "shift" in str(getattr(event, "key", "")).lower()
         if is_shift:
-            series = self.series_list[series_idx]
-            x_value = series.frames[local_idx]
-            y_value = series.values[local_idx]
-            color = series.color
-            cursor = DataCursor.Cursor(
-                self.ax, x_value, y_value, series_idx, color, is_default=False
-            )
-            cursor.locked = True
-            self.cursors.append(cursor)
+            cursor = self._new_cursor(series_idx, local_idx, "pinned")
+            self._pinned.append(cursor)
             self._select_cursor(cursor)
-            self._click_selected = cursor
-            self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
-            cursor.highlight.set_visible(True)
+            self._keyboard_target = cursor
             cursor.apply_style(True)
+            self.hide_hover()
             return cursor
 
-        cursor = self.cursors[series_idx]
+        pinned = self._pinned_at(series_idx, local_idx)
+        if pinned is not None:
+            self._remove_pinned_cursor(pinned, request_draw=False)
+            self.hide_hover()
+            self.fig.canvas.draw_idle()
+            return None
+
+        active = self.active_selection
+        if (
+            active is not None
+            and active.series_idx == series_idx
+            and active.current_index == local_idx
+        ):
+            self.clear_active()
+            self.hide_hover()
+            self.fig.canvas.draw_idle()
+            return None
+
+        if self._active is None:
+            self._active = self._new_cursor(series_idx, local_idx, "active")
+        else:
+            cursor = self._active
+            cursor.series_idx = series_idx
+            cursor.color = self.series_list[series_idx].color
+            cursor.highlight.set_color(cursor.color)
+            self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
+            cursor.highlight.set_visible(True)
+        cursor = self._active
         self._select_cursor(cursor)
-        self._click_selected = cursor
-        cursor.locked = not cursor.locked
+        self._keyboard_target = cursor
         cursor.apply_style(True)
-        self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
-        cursor.highlight.set_visible(True)
+        self.hide_hover()
         return cursor
+
+    def clear_active(self) -> bool:
+        cursor = self.active_selection
+        if cursor is None:
+            return False
+        cursor.highlight.set_visible(False)
+        cursor.tooltip.set_visible(False)
+        if self._selected is cursor:
+            self._selected = None
+        if self._keyboard_target is cursor:
+            self._keyboard_target = None
+        return True
 
     def on_release(self, _event: MouseEvent) -> None:
         self._dragging_cursor = None
@@ -364,7 +489,7 @@ class DataCursor:
             self.remove_selected_cursor()
             return
 
-        cursor = self._click_selected
+        cursor = self._keyboard_target
         if cursor is None:
             return
 
@@ -384,37 +509,21 @@ class DataCursor:
 
         if 0 <= new_position < len(valid_indices):
             selected_idx = int(valid_indices[new_position])
-            follow_tooltip = cursor.tooltip.get_visible()
-            self._update_cursor_visuals(
-                cursor, selected_idx, show_tooltip=follow_tooltip
-            )
+            self._update_cursor_visuals(cursor, selected_idx, show_tooltip=True)
             cursor.highlight.set_visible(True)
             self.fig.canvas.draw_idle()
 
     def remove_selected_cursor(self) -> bool:
         cursor = self._selected
-        if cursor is None or cursor.is_default:
+        if cursor is None or cursor.role != "pinned":
             return False
-        if cursor is self._click_selected:
-            self._click_selected = None
-        owner_default = self.cursors[cursor.series_idx]
-        cursor.highlight.remove()
-        cursor.tooltip.remove()
-        self.cursors.remove(cursor)
-        self._select_cursor(owner_default)
-        self.fig.canvas.draw_idle()
+        self._remove_pinned_cursor(cursor)
         return True
 
     def clear_extra_cursors(self, *, request_draw: bool = True) -> int:
-        extras = [cursor for cursor in self.cursors if not cursor.is_default]
+        extras = list(self._pinned)
         for cursor in extras:
-            cursor.highlight.remove()
-            cursor.tooltip.remove()
-            self.cursors.remove(cursor)
-        if self._selected in extras:
-            self._select_cursor(self.cursors[0])
-        if self._click_selected in extras:
-            self._click_selected = None
+            self._remove_pinned_cursor(cursor, request_draw=False)
         if extras and request_draw:
             self.fig.canvas.draw_idle()
         return len(extras)
@@ -426,18 +535,13 @@ class DataCursor:
     def contains_tooltip(self, event: MouseEvent) -> bool:
         return any(cursor.tooltip.contains(event)[0] for cursor in self.cursors)
 
-    def hide_tooltips(self, except_cursor: Cursor | None = None) -> None:
-        for cursor in self.cursors:
-            if cursor is not except_cursor:
-                cursor.tooltip.set_visible(False)
-
     def capture_state(self) -> StateSnapshot:
         return DataCursor.StateSnapshot(
             cursors=tuple(
                 DataCursor.CursorState(
                     cursor=cursor,
                     current_index=cursor.current_index,
-                    locked=cursor.locked,
+                    role=cursor.role,
                     marker_visible=cursor.highlight.get_visible(),
                     tooltip_visible=cursor.tooltip.get_visible(),
                     tooltip_anchor=tuple(cursor.tooltip.xy),
@@ -446,8 +550,14 @@ class DataCursor:
                 )
                 for cursor in self.cursors
             ),
+            active=self._active,
+            pinned=tuple(self._pinned),
             selected=self._selected,
-            click_selected=self._click_selected,
+            keyboard_target=self._keyboard_target,
+            hover_series_idx=self._hover_series_idx,
+            hover_index=self._hover_index,
+            hover_active=self._hover_active,
+            hover_visible=self.hover_highlight.get_visible(),
         )
 
     def restore_state(self, snapshot: StateSnapshot) -> None:
@@ -457,12 +567,17 @@ class DataCursor:
                 continue
             cursor.highlight.remove()
             cursor.tooltip.remove()
-        self.cursors = captured_cursors
+        self._active = snapshot.active
+        self._pinned = list(snapshot.pinned)
         self._selected = snapshot.selected
-        self._click_selected = snapshot.click_selected
+        self._keyboard_target = snapshot.keyboard_target
         for state in snapshot.cursors:
             cursor = state.cursor
-            cursor.locked = state.locked
+            if cursor.highlight.axes is None:
+                self.ax.add_line(cursor.highlight)
+            if cursor.tooltip.axes is None:
+                self.ax.add_artist(cursor.tooltip)
+            cursor.role = state.role
             self._update_cursor_visuals(
                 cursor, state.current_index, show_tooltip=False
             )
@@ -472,6 +587,17 @@ class DataCursor:
             cursor.tooltip.set_position(state.tooltip_position)
             cursor.tooltip.set_text(state.tooltip_text)
             cursor.apply_style(cursor is self._selected)
+        self._hover_series_idx = snapshot.hover_series_idx
+        self._hover_index = snapshot.hover_index
+        self._hover_active = snapshot.hover_active
+        hover_series = self.series_list[self._hover_series_idx]
+        self.hover_highlight.set_data(
+            [hover_series.frames[self._hover_index]],
+            [hover_series.values[self._hover_index]],
+        )
+        self.hover_highlight.set_color(hover_series.color)
+        self.hover_highlight.set_markeredgecolor("gold")
+        self.hover_highlight.set_visible(snapshot.hover_visible)
         self._dragging_cursor = None
         self._drag_start_mouse = None
         self._drag_start_position = None
@@ -486,7 +612,7 @@ class DataCursor:
         self._drag_start_mouse = None
         self._drag_start_position = None
         self._selected = None
-        self._click_selected = None
+        self._keyboard_target = None
         self._disp_xy_list = None
         self._disp_indices_list = None
         self._disp_cache_valid = False
@@ -631,12 +757,6 @@ class FigureDispatcher:
             None,
         )
 
-    def _hide_all_tooltips(
-        self, except_cursor: DataCursor.Cursor | None = None
-    ) -> None:
-        for controller in self.controllers:
-            controller.hide_tooltips(except_cursor)
-
     def _hide_transient_highlights(
         self, except_controller: DataCursor | None = None
     ) -> bool:
@@ -731,8 +851,11 @@ class FigureDispatcher:
         self.active_controller = controller
         clicked_cursor = controller.on_click(event)
         if clicked_cursor is not None:
+            if clicked_cursor.role == "active":
+                for candidate in self.controllers:
+                    if candidate is not controller:
+                        candidate.clear_active()
             self.keyboard_controller = controller
-            self._hide_all_tooltips(except_cursor=clicked_cursor)
             self.figure.canvas.draw_idle()
         if controller.is_dragging:
             self.dragging_controller = controller
