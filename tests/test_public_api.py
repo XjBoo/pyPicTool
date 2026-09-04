@@ -503,13 +503,15 @@ class InteractivePlotTests(unittest.TestCase):
 
         session.figure.canvas.draw()
         bbox = active.tooltip.get_window_extent(session.figure.canvas.get_renderer())
-        send_canvas_mouse_event(
-            session,
-            "button_press_event",
-            bbox.x0 + bbox.width / 2,
-            bbox.y0 + bbox.height / 2,
-            button=1,
-        )
+        with patch.object(session.figure.canvas, "draw_idle") as draw_idle:
+            send_canvas_mouse_event(
+                session,
+                "button_press_event",
+                bbox.x0 + bbox.width / 2,
+                bbox.y0 + bbox.height / 2,
+                button=1,
+            )
+        draw_idle.assert_called_once_with()
         send_canvas_mouse_event(
             session,
             "button_release_event",
@@ -1411,13 +1413,15 @@ class InteractivePlotTests(unittest.TestCase):
         # Clicking the pinned tooltip makes it the new keyboard target.
         session.figure.canvas.draw()
         bbox = blue_pin.tooltip.get_window_extent(session.figure.canvas.get_renderer())
-        send_canvas_mouse_event(
-            session,
-            "button_press_event",
-            bbox.x0 + bbox.width / 2,
-            bbox.y0 + bbox.height / 2,
-            button=1,
-        )
+        with patch.object(session.figure.canvas, "draw_idle") as draw_idle:
+            send_canvas_mouse_event(
+                session,
+                "button_press_event",
+                bbox.x0 + bbox.width / 2,
+                bbox.y0 + bbox.height / 2,
+                button=1,
+            )
+        draw_idle.assert_called_once_with()
         send_canvas_mouse_event(
             session,
             "button_release_event",
@@ -1641,13 +1645,15 @@ class InteractivePlotTests(unittest.TestCase):
         bbox = left_active.tooltip.get_window_extent(
             session.figure.canvas.get_renderer()
         )
-        send_canvas_mouse_event(
-            session,
-            "button_press_event",
-            bbox.x0 + bbox.width / 2,
-            bbox.y0 + bbox.height / 2,
-            button=1,
-        )
+        with patch.object(session.figure.canvas, "draw_idle") as draw_idle:
+            send_canvas_mouse_event(
+                session,
+                "button_press_event",
+                bbox.x0 + bbox.width / 2,
+                bbox.y0 + bbox.height / 2,
+                button=1,
+            )
+        draw_idle.assert_called_once_with()
         send_canvas_mouse_event(
             session,
             "button_release_event",

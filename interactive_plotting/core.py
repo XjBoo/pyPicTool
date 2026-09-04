@@ -860,6 +860,7 @@ class FigureDispatcher:
             clicked_cursor = controller.on_click(event)
             if clicked_cursor is not None:
                 self._set_keyboard_controller(controller)
+                self.figure.canvas.draw_idle()
             else:
                 self._sync_keyboard_controller(controller)
             if controller.is_dragging:
