@@ -268,11 +268,6 @@ class DataCursor:
             overlap.apply_style(overlap is self._selected)
         return True
 
-    def _hide_transient_highlights(self, except_cursor: Cursor | None = None) -> bool:
-        """Compatibility wrapper for the former transient-cursor helper."""
-
-        return self.hide_hover()
-
     def _selection_at(self, series_idx: int, local_idx: int) -> Cursor | None:
         for cursor in self.cursors:
             if (
@@ -812,7 +807,7 @@ class FigureDispatcher:
         for controller in self.controllers:
             if controller is except_controller:
                 continue
-            if controller._hide_transient_highlights():
+            if controller.hide_hover():
                 changed = True
         return changed
 

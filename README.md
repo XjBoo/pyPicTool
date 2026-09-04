@@ -58,8 +58,9 @@ about the future business-data interface.
   click (a data-point click, a Shift+left-click extra cursor, or a click on
   its tooltip), without moving any other selection. Hovering never changes
   the keyboard target. The most recently clicked selection is the only
-  persistent marker with the gold focus style. While a session is active,
-  Left/Right/Home/Backspace are detached
+  persistent keyboard-focus target; a different persistent marker under the
+  pointer may also temporarily use the gold hover-focus style. While a session
+  is active, Left/Right/Home/Backspace are detached
   from the Matplotlib navigation toolbar's view history; the default
   bindings return once the last session disconnects.
 - Drag a visible tooltip to reposition its text. Cursor interaction pauses
