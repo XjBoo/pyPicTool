@@ -12,7 +12,7 @@
 
 | 检查 | 本轮结果 |
 | --- | --- |
-| `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v` | 通过，60 项，退出码 0 |
+| `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v` | 通过，61 项，退出码 0 |
 | `PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py` | 通过，退出码 0；每系列 1,000/10,000 点均完成，无性能阈值，不宣称性能指标达标 |
 | `openspec validate --changes` | 通过，1 项，退出码 0 |
 | `git diff --check` | 通过，退出码 0；不等同 Lint |
@@ -52,4 +52,17 @@ CUA 的 AX 复选框动作可能只改变 Qt 工具栏按钮勾选外观，验�
 
 基线提交：`1089e2aa867a6d35bb04a030684318f4b5ca6d02`。待审提交在独立评审记录中固定，并使用与该基线的 merge-base。本轮初始工作区仅存在上一轮创建的 OpenSpec 未跟踪方案，无其他用户代码修改。
 
-代码和自动化验证已就绪；独立评审与剩余真实 GUI 场景未全部完成前，不宣布 OpenSpec change 全部验收通过或允许归档。本次不自动归档。
+代码和自动化验证已就绪；剩余真实 GUI 场景未全部完成前，不宣布 OpenSpec change 全部验收通过或允许归档。本次不自动归档。
+
+## 独立评审与修复
+
+初审范围：`1089e2aa867a6d35bb04a030684318f4b5ca6d02..2042eacb5d3de518a418967804321353e83189d9`，独立 Reviewer 未参与实现，读取全部规格并重跑 60 项测试、benchmark、OpenSpec，均退出 0。
+
+- Critical：无。
+- Important 代码问题：tooltip 新增 zorder=10 高于图例默认 5，但事件仍优先命中图例，重叠拖动目标与可见层级不一致。实现 Agent 独立复现双方同时命中且只开始拖图例，确认成立。
+- 修复：tooltip 改为 zorder=4，位于曲线/散点之上、图例之下，保留既有事件优先级。新增重叠回归先在旧代码失败（10 不小于 5），修复后通过。重新运行完整 61 项测试、benchmark、OpenSpec 及 diff 检查，全部退出 0。
+- Minor：无。
+- Important 未完成验收：2.3 中的部分真实 GUI 场景未执行，属于验证缺口，不能以 Agg 代替，也未视作解决。任务 3.3 因该门槛仍未完成。
+- 本机额外中文渲染检查通过：DejaVu Sans + Arial Unicode MS，中文标题及负数渲染无缺字警告；不等同 Windows 实测。
+
+修复后独立复查的固定提交和结论见后续记录。

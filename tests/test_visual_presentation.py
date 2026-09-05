@@ -7,6 +7,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import to_rgba
+from matplotlib.backend_bases import MouseEvent
 from interactive_plotting import SeriesData, create_interactive_plot, make_demo_series
 from tests.test_public_api import send_mouse_event, send_key_event
 
@@ -34,6 +35,29 @@ class PresentationTests(unittest.TestCase):
         legend = axis.get_legend()
         for handle, label in zip(legend.legend_handles, legend.get_texts()):
             self.assertEqual(handle.get_color(), lines[label.get_text()].get_color())
+
+    def test_overlapping_legend_is_drawn_above_tooltip_and_receives_drag(self):
+        session = self.make_session([
+            SeriesData([0, 1, 2], [0, 1, 0], 'measurement')
+        ])
+        axis = session.axes[0]
+        send_mouse_event(session, 'button_press_event', axis, 1, 1, button=1)
+        tooltip = session.controllers[0].active_selection.tooltip
+        legend = axis.get_legend()
+        session.figure.canvas.draw()
+        bounds = legend.get_window_extent()
+        x, y = bounds.x0 + 20, bounds.y0 + 12
+        tooltip.xy = axis.transData.inverted().transform((x, y))
+        tooltip.set_position((0, 0))
+        session.figure.canvas.draw()
+        event = MouseEvent('button_press_event', session.figure.canvas,
+                           x + 5, y + 3, button=1)
+        self.assertTrue(tooltip.contains(event)[0])
+        self.assertTrue(legend.contains(event)[0])
+        self.assertLess(tooltip.get_zorder(), legend.get_zorder())
+        session.figure.canvas.callbacks.process('button_press_event', event)
+        self.assertIs(session._dispatcher.dragging_legend, legend)
+        self.assertFalse(session.controllers[0].is_dragging)
 
     def test_font_fallback_and_late_tooltip_leave_global_defaults_unchanged(self):
         before = dict(plt.rcParams)

@@ -95,7 +95,8 @@ class DataCursor:
                 bbox=dict(boxstyle="round,pad=0.6", fc="white", ec=BORDER,
                           lw=0.8, alpha=1),
                 arrowprops=dict(arrowstyle="->", color=MUTED, lw=0.8),
-                zorder=10,
+                # Match the dispatcher's legend-first hit testing on overlap.
+                zorder=4,
                 visible=False,
             )
 
