@@ -1,4 +1,5 @@
 """Behavior checks for presentation compatibility, independent of exact pixels."""
+import sys
 import unittest
 from copy import deepcopy
 from unittest.mock import patch
@@ -81,6 +82,11 @@ class PresentationTests(unittest.TestCase):
         session.close()
         self.assertEqual(dict(plt.rcParams), before)
 
+    def test_agg_sessions_do_not_load_qt_compat(self):
+        self.make_session([SeriesData([0, 1, 2], [0, 1, 0], 'plain')])
+        # Design decision 7: Qt adaptation loads only when a Qt window exists.
+        self.assertNotIn('matplotlib.backends.qt_compat', sys.modules)
+
     def test_layout_titles_and_scaled_hit_testing(self):
         series = make_demo_series(seed=42)
         session = self.make_session(series)
@@ -88,7 +94,7 @@ class PresentationTests(unittest.TestCase):
         session.figure.canvas.draw()
         renderer = session.figure.canvas.get_renderer()
         for axis in session.axes:
-            self.assertTrue(axis.get_title())
+            self.assertEqual(axis.get_title(), "Signal comparison")
             self.assertGreater(axis.title.get_fontsize(), axis.get_xticklabels()[0].get_fontsize())
             self.assertFalse(axis.title.get_window_extent(renderer).overlaps(
                 axis.get_legend().get_window_extent(renderer)))

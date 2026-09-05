@@ -1,7 +1,9 @@
 """Optional Qt window controls, kept outside the plot's exported artists."""
 
+from matplotlib.figure import Figure
 
-def install_toolbar_toggle(figure) -> None:
+
+def install_toolbar_toggle(figure: Figure) -> None:
     """Collapse native Qt navigation without loading Qt on headless backends."""
     canvas = figure.canvas
     manager = getattr(canvas, "manager", None)
@@ -15,7 +17,7 @@ def install_toolbar_toggle(figure) -> None:
         return
 
     class ToolbarToggle(QtWidgets.QToolButton):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__(canvas)
             self.setObjectName("plotToolbarToggle")
             self.setText("工具栏")
@@ -36,16 +38,18 @@ def install_toolbar_toggle(figure) -> None:
             self.reposition()
             self.show()
 
-        def reposition(self):
+        def reposition(self) -> None:
             self.move(max(0, canvas.width() - self.width() - 8), 4)
             self.raise_()
 
-        def eventFilter(self, watched, event):
+        def eventFilter(
+            self, watched: QtCore.QObject, event: QtCore.QEvent
+        ) -> bool:
             if watched is canvas and event.type() == QtCore.QEvent.Type.Resize:
                 self.reposition()
             return super().eventFilter(watched, event)
 
-        def toggle_toolbar(self, visible):
+        def toggle_toolbar(self, visible: bool) -> None:
             if not visible:
                 # Hiding controls must not leave an invisible navigation lock.
                 if toolbar.mode.name == "PAN":
@@ -56,5 +60,8 @@ def install_toolbar_toggle(figure) -> None:
             canvas.setFocus()
 
     toolbar.hide()
-    # Qt parent ownership retains the control for the canvas lifetime.
-    ToolbarToggle()
+    # Qt parent ownership retains the C++ control for the canvas lifetime.
+    # The Python wrapper is only kept alive by the signal connections above
+    # (installEventFilter holds a weak reference); keep an explicit reference
+    # so a future refactor cannot silently drop the resize event filter.
+    canvas._toolbar_toggle = ToolbarToggle()

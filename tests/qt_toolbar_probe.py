@@ -52,6 +52,26 @@ def main():
     button.click()
     assert session._dispatcher.layout.maximized_axes is axis
     session.restore_layout()
+    # Shift+click pins a selection that must survive toolbar toggles.
+    canvas.callbacks.process("button_press_event", MouseEvent(
+        "button_press_event", canvas, *axis.transData.transform((2, 0)),
+        button=1, key="shift"))
+    controller = session.controllers[0]
+    pins_before = tuple(controller.pinned_selections)
+    assert pins_before, "shift+click must create a pinned selection"
+    # Collapse without ever enabling pan/zoom: the most common direct path.
+    button.click()
+    app.processEvents()
+    assert toolbar.isVisible() and button.isChecked()
+    button.click()
+    app.processEvents()
+    assert toolbar.isHidden() and not toolbar.mode, "toolbar must hide again"
+    assert canvas.hasFocus(), "collapse must return focus to the canvas"
+    assert not canvas.widgetlock.locked(), "collapse must release the widget lock"
+    assert (axis.get_xlim(), axis.get_ylim()) == limits, "view must be preserved"
+    assert controller.active_selection is selected, "selection must be preserved"
+    assert controller.pinned_selections == pins_before, "pins must be preserved"
+    assert all(pin.tooltip.get_visible() for pin in pins_before)
     manager.window.resize(820, 560)
     app.processEvents()
     assert button.x() + button.width() <= canvas.width()

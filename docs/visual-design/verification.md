@@ -104,3 +104,11 @@ CUA 的 AX 复选框动作可能只改变 Qt 工具栏按钮勾选外观，验�
 实际运行 `venv/bin/python interactive_plot.py` 启动了新窗口；CUA 按应用名及路径定位时返回另一个已存在的旧 Python 绘图进程（无新按钮），未对旧窗口执行操作。因此本轮真实鼠标展开/收起未验收，Qt offscreen 结果不冒充实机通过；Windows 亦未实测。任务 5.2 保留未完成，既有 2.3/3.3 状态不变，不归档。
 
 工具栏独立评审范围：`3672c6f6a17f56127214f213f233006d1bed493a..333700849204b48a52b6c510bb77c1942f0cfdc0`，评审时工作区干净。Reviewer 未发现 Critical/Important 代码缺陷；其完整 62 项测试、独立 Qt probe、额外 Agg 未加载 Qt 检查、benchmark 和 OpenSpec 均通过。Minor 指出直接注入 Matplotlib 键盘事件不能证明 Qt 焦点，已核实成立并在收起后的 Qt probe 增加 `canvas.hasFocus()` 断言；相关检查及完整 62 项、benchmark、OpenSpec、diff 检查再次通过。该后续改动仅为测试断言与记录，不修改运行代码。已另外查看 offscreen 原生窗口在收起/展开时的渲染，按钮位于右上角；此渲染不替代真实桌面验收，5.2 的 GUI 部分仍保留未完成。
+
+### 主线收尾评审（main...pic-opt）
+
+本轮以 `main`（merge-base `1089e2aa867a6d35bb04a030684318f4b5ca6d02`）到 `eedb50fff2a1c2d2db542b50fe7a6fd0ded7c947` 的完整分支范围为固定范围执行收尾评审；评审时工作树干净。本轮实际执行：完整 62 项 unittest、Hover 冒烟、OpenSpec 校验，均退出 0；类型/Lint/构建/E2E/安全扫描仍为既有覆盖缺口。
+
+独立 Reviewer（未参与实现，只读）重读全部规格工件与运行代码，核实 `toolbar.mode` 枚举用法、Qt 对象保活链、Agg 不加载 Qt、close 幂等、figsize、zorder 优先级与字体回退等关键点。结论：无 Critical、无 Important；确认 7 项 Minor（M1 ToolbarToggle 保活注释/显式引用、M2 probe 缺直接收起路径与钉选断言、M3 Agg 不加载 Qt 缺持久回归、M4 标题断言仅查非空、M5 probe 子进程未固定 MPLCONFIGDIR 且 timeout 偏紧、M6 qt_toolbar 无类型注解、M7 按钮/图例遮挡并入 5.2 清单）。逐项核实均成立，无误报；用户选择全部修复。
+
+修复 M1–M6：qt_toolbar.py 显式持有 `canvas._toolbar_toggle` 引用并注明保活链、补全类型注解（M1/M6，行为等价）；probe 增加 Shift 钉选保留断言与“展开后未启用 pan/zoom 直接收起”路径（M2）；test_visual_presentation.py 新增 Agg 会话不加载 `matplotlib.backends.qt_compat` 的持久回归并将标题断言改为逐字相等（M3/M4）；test_qt_toolbar.py 子进程固定仓库 MPLCONFIGDIR、timeout 放宽至 120 s（M5）；M7 写入任务 5.2 验收清单。修复后完整 63 项测试（含扩展 probe 子进程）、Hover 冒烟及 OpenSpec 校验重跑均退出 0。任务 2.3/3.3/5.2 的真实 GUI 与 Windows 实机缺口保持未完成，不归档；修复提交后由新的独立 Reviewer 复审完整范围。
