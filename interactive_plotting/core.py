@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 
 from .model import SeriesData
+from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes
 
 # Keyboard cursor navigation owns keys that Matplotlib's default keymap binds
 # to navigation-toolbar view history (back/forward/home). Sessions claim the
@@ -87,8 +88,14 @@ class DataCursor:
                 xy=(0, 0),
                 xytext=(20, 20),
                 textcoords="offset points",
-                bbox=dict(boxstyle="round,pad=0.5", fc="white", alpha=0.8),
-                arrowprops=dict(arrowstyle="->"),
+                fontsize=9,
+                fontfamily=ax.xaxis.label.get_fontfamily(),
+                color=TEXT,
+                linespacing=1.5,
+                bbox=dict(boxstyle="round,pad=0.6", fc="white", ec=BORDER,
+                          lw=0.8, alpha=1),
+                arrowprops=dict(arrowstyle="->", color=MUTED, lw=0.8),
+                zorder=10,
                 visible=False,
             )
 
@@ -1044,11 +1051,16 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
 
     row_count = max(item.panel[0] for item in series_items) + 1
     column_count = max(item.panel[1] for item in series_items) + 1
-    figure, axes_grid = plt.subplots(row_count, column_count, squeeze=False)
+    figure, axes_grid = plt.subplots(
+        row_count, column_count, squeeze=False,
+        figsize=(6 * column_count, max(4, 10 * row_count / 3)),
+        facecolor=CANVAS,
+    )
     controllers: list[DataCursor] = []
     axes: list[Axes] = []
     legends: list[Legend] = []
     try:
+        families = font_families()
         grouped: dict[tuple[int, int], list[SeriesData]] = {}
         for item in series_items:
             grouped.setdefault(item.panel, []).append(item)
@@ -1062,10 +1074,15 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                     ax.set_visible(False)
                     continue
 
+                style_axes(ax, families)
+
                 for item in panel_series:
-                    line_kwargs = {"alpha": item.line_alpha, "zorder": 1}
-                    if item.line_color is not None:
-                        line_kwargs["color"] = item.line_color
+                    line_kwargs = {
+                        "alpha": item.line_alpha, "zorder": 2,
+                        "color": item.line_color if item.line_color is not None
+                        else item.color,
+                        "linewidth": 1.35, "solid_capstyle": "round",
+                    }
                     ax.plot(
                         item.frames,
                         item.plotting_values,
@@ -1076,9 +1093,10 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                         item.frames[item.valid_mask],
                         item.values[item.valid_mask],
                         c=item.color,
-                        s=15,
-                        zorder=2,
-                        alpha=0.6,
+                        s=10,
+                        linewidths=0,
+                        zorder=3,
+                        alpha=0.75,
                     )
                 controller = DataCursor(ax, panel_series)
                 controllers.append(controller)
@@ -1087,15 +1105,24 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                     None,
                 )
                 if panel_title:
-                    ax.set_title(panel_title)
+                    ax.set_title(panel_title, pad=13, fontsize=12,
+                                 fontweight="semibold", color=TEXT,
+                                 fontfamily=families)
+                    ax.title.set_horizontalalignment("left")
+                    ax.title.set_x(0)
                 ax.set_xlabel("Frame Number")
                 ax.set_ylabel("Value")
-                legend = ax.legend(loc="upper right")
+                legend = ax.legend(
+                    loc="upper right", prop={"family": families, "size": 8},
+                    facecolor="white", edgecolor=BORDER, framealpha=0.95,
+                    labelcolor=TEXT, borderpad=0.7, labelspacing=0.45,
+                    handlelength=2, handletextpad=0.7,
+                )
+                legend.get_frame().set_linewidth(0.6)
                 legend.set_draggable(True)
                 legends.append(legend)
-                ax.grid(True, linestyle="--", alpha=0.6)
 
-        figure.tight_layout()
+        figure.tight_layout(pad=2.2, h_pad=2.6, w_pad=2.5)
         dispatcher = FigureDispatcher(figure, controllers, axes)
         return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
     except Exception:

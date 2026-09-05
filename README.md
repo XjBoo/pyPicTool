@@ -113,3 +113,37 @@ hit-testing; pass `--include-render` to include Agg redraw cost.
 Runtime dependencies and the supported Python version are declared in
 `pyproject.toml`. Ruff and mypy configuration is included for future use, but
 those tools are not installed or claimed as part of the current verification.
+
+## Visual presentation and Windows
+
+Plots use a light gray canvas, white panels, quiet grid lines and left-aligned
+headings. The demo uses blue sine signals and orange cosine signals. A series'
+line defaults to its point color; explicit `line_color` and `line_alpha` still
+win. Styling is local to each figure and does not change global plotting defaults.
+The six-panel demo opens at 12 × 10 inches; other grids scale with panel count.
+Tooltips retain their drag behavior, circular gold focus and Frame/Value content.
+Near an edge a tooltip can extend outside its panel; drag it into free space.
+
+From the repository root on Windows, after installing the declared dependencies
+in a Python 3.11+ environment, run:
+
+```powershell
+venv\Scripts\python.exe interactive_plot.py
+```
+
+The existing QtAgg/PySide6 backend is retained. Latin text and numeric minus
+signs use Matplotlib's bundled DejaVu Sans; installed CJK fonts (including
+Microsoft YaHei or SimHei on Windows) supply Chinese glyphs. No external font
+download or platform-specific font path is required. If no CJK font is installed,
+English and numbers still render, but Chinese glyph coverage is not guaranteed.
+
+Windows acceptance checklist (not yet tested on a Windows machine):
+
+- Launch and close the window; use Chinese panel titles and negative values.
+- At 100%, 150% and 200% display scaling, resize the window and check text and
+  point hit-testing. Confirm double-click/Esc restores the layout.
+- Exercise hover, click, Shift+click, Left/Right/Home/End, Delete/Backspace,
+  tooltip/legend dragging and toolbar pan/zoom.
+
+See [visual examples and verification](docs/visual-design/verification.md) for
+actual checks and remaining platform limitations.
