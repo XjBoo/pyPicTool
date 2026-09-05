@@ -1106,7 +1106,7 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                     None,
                 )
                 if panel_title:
-                    ax.set_title(panel_title, pad=6, fontsize=10,
+                    ax.set_title(panel_title, pad=9, fontsize=11,
                                  fontweight="semibold", color=TEXT,
                                  fontfamily=families)
                     ax.title.set_horizontalalignment("left")
@@ -1123,7 +1123,7 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                 legend.set_draggable(True)
                 legends.append(legend)
 
-        figure.tight_layout(pad=0.8, h_pad=1.0, w_pad=1.0)
+        figure.tight_layout(pad=1.4, h_pad=1.7, w_pad=1.7)
         dispatcher = FigureDispatcher(figure, controllers, axes)
         return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
     except Exception:

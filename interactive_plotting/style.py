@@ -31,12 +31,12 @@ def style_axes(axis: Axes, families: list[str]) -> None:
         spine.set_color(BORDER)
         spine.set_linewidth(0.7)
     axis.tick_params(axis="both", colors=MUTED, labelsize=8.5, length=3,
-                     width=0.6, pad=3)
+                     width=0.6, pad=4)
     for coordinate_axis in (axis.xaxis, axis.yaxis):
         coordinate_axis.label.set_fontfamily(families)
         coordinate_axis.label.set_fontsize(9)
         coordinate_axis.label.set_color(MUTED)
-        coordinate_axis.labelpad = 3
+        coordinate_axis.labelpad = 5
         coordinate_axis.offsetText.set_fontfamily(families)
         coordinate_axis.offsetText.set_fontsize(8.5)
         coordinate_axis.offsetText.set_color(MUTED)
