@@ -1,31 +1,88 @@
 # Interactive plotting
 
-The package has three layers: `model` defines the temporary internal
-`SeriesData` format, `core` owns reusable Matplotlib construction and cursor
-interactions, and `demo` owns artificial data plus the only blocking
-`plt.show()` call. The real producer's format is still unknown; a future
-adapter should map it into `SeriesData` without changing the plotting core.
+The package separates figure descriptions (`api` and `model`), Matplotlib
+construction and cursor interactions (`core`), and artificial example data (`demo`).
+Callers describe their figures with `figure → subplot → plot`, then build each
+interactive session once. No business-data format is required beyond x/y arrays.
 
-## Reusable API
+## Reusable interface
 
-Callers construct series, retain the returned session for the whole figure
-lifetime, and decide when to show or close it:
+```python
+from interactive_plotting import figure
+import matplotlib.pyplot as plt
+
+fig = figure(rows=2, cols=1, title="Experiment", figsize=(10, 8))
+top = fig.subplot(1, title="Temperature", xlabel="Time / s", ylabel="Temperature / °C")
+top.plot([0, 1, 2], [20, 22, 21], label="Sensor A", color="blue", marker="o")
+top.plot([0, 1, 2], [19, 21, 23], label="Sensor B", color="orange", marker="s")
+fig.subplot(2, title="Pressure", xlabel="Time / s", ylabel="Pressure / kPa").plot(
+    [0, 1, 2], [100, 102, 101], label="Pressure", marker="^", linestyle="--",
+)
+session = fig.build()
+try:
+    plt.show()
+finally:
+    session.close()
+```
+
+For one subplot, use `figure()` and `fig.subplot(1)`. For multiple windows,
+create several independent descriptions and call `build()` on each, then call
+`plt.show()` once. Keep each returned session alive while using its window.
+For export without a GUI event loop, use `session.figure.savefig("result.png")`.
+
+- `figure(rows=1, cols=1, title="", figsize=None)` fixes the rectangular grid.
+  Width and height are in inches. Rows and columns must be positive integers.
+- `fig.subplot(index, title=None, xlabel=None, ylabel=None)` uses **1-based,
+  row-major numbering**: a 2×2 grid contains 1/2 in the top row and 3/4 below.
+  Reusing an index returns the same subplot. Supplied text updates that subplot;
+  omitted/None text stays unchanged, and `""` clears it. Titles align left.
+  Explicitly created empty subplots are visible; unused grid cells are hidden.
+  A figure with no subplots can also be built, with every grid cell hidden.
+- `ax.plot(x, y, label=None, color=None, marker="o", linestyle="-",
+  linewidth=1.35, markersize=10**0.5)` always appends one curve and returns `ax`.
+  Repeated calls set the curve count. Colors cycle independently in each subplot;
+  explicit colors use Matplotlib color names, hex strings or RGB(A) tuples.
+  Named curves appear in a draggable legend; unnamed curves do not.
+- Point symbols: `o s ^ v < > D d p h H * + x . , | _ 1 2 3 4 8 P X`.
+  Use `marker=None` for a line alone. Line styles are `-`, `--`, `-.`, `:`
+  (or `solid`, `dashed`, `dashdot`, `dotted`); `"None"` hides the connecting line.
+  At least the line or points must be enabled. Line width and marker size are
+  finite positive numbers in points.
+- The description creates no windows or event bindings. `build()` renders without
+  showing or blocking, then freezes the description. Further additions or text
+  edits raise `RuntimeError`; repeated builds return the same session, including
+  after it has closed. Invalid input raises `ValueError` without partial changes;
+  failed construction cleans up resources and permits a retry.
+
+`PlotSession` exposes the underlying Matplotlib `figure`, row-major `axes`,
+`disconnect()`, `close()`, `remove_selected_cursor()`, `clear_extra_cursors()`,
+`toggle_axes_maximized(axis)`, and `restore_layout()`. Disconnect and close are
+idempotent. Use the description to configure plots before building: direct
+Matplotlib data/structure edits after build are outside the interaction contract.
+Live updates and adding curves after build are unsupported; create a new figure.
+
+Run the two-window example (custom grid, empty panel, Chinese headings and styles):
+
+```console
+venv/bin/python -m examples.flexible_plot
+MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m examples.flexible_plot --save-dir /tmp/flexible-plot-example
+```
+
+### Compatibility entry point
+
+Existing callers keep their inferred layout, colors and Frame Number/Value labels:
 
 ```python
 from interactive_plotting import SeriesData, create_interactive_plot
 
-series = [SeriesData(frames=[0, 1], values=[0.0, 1.0], label="example")]
-session = create_interactive_plot(series)
-session.figure.show()
+session = create_interactive_plot([
+    SeriesData(frames=[0, 1], values=[0.0, 1.0], label="example"),
+])
 session.close()
 ```
 
-`PlotSession` exposes `disconnect()`, `close()`,
-`remove_selected_cursor()`, `clear_extra_cursors()`,
-`toggle_axes_maximized(axis)`, and `restore_layout()`. Disconnect and close are
-idempotent; close also removes the figure from Matplotlib. `SeriesData` copies
-its arrays and makes them read-only. Dynamic updates are intentionally
-unsupported for now: create a new session when the source data changes.
+`SeriesData` copies its arrays and makes them read-only. It remains the
+normalization format for legacy callers and future business-data adapters.
 
 ## Data rules
 
@@ -69,7 +126,7 @@ about the future business-data interface.
   Matplotlib figure. Double-click it again to restore the exact captured
   layout. Programmatic switching restores the previous axes before maximizing
   the next one.
-- While an axes is maximized, Esc restores the six-panel layout and preserves
+- While an axes is maximized, Esc restores the original subplot layout and preserves
   pinned selections. Outside maximized mode, Esc clears all pins.
 - Drag anywhere on a legend box or its labels to reposition the whole legend.
   Legend and tooltip gestures take priority over subplot maximization.
@@ -78,7 +135,7 @@ Tooltips stay hidden during initialization and hover. Active and pinned
 selections each show a white tooltip containing only `Frame` and `Value`, both
 formatted by the corresponding axis formatter. Hover never moves a tooltip;
 keyboard movement of the clicked selection carries its tooltip to the new
-point and refreshes the values. All cursor markers are circular; marker size
+point and refreshes the values. Data-point shapes are configurable; all cursor markers are circular; marker size
 and a gold edge identify the current click or hover focus.
 
 ## GUI stack

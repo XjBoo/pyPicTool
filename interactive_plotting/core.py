@@ -11,8 +11,11 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import CloseEvent, DrawEvent, KeyEvent, MouseEvent
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
+from matplotlib.lines import Line2D
+from matplotlib.markers import MarkerStyle
+from matplotlib.typing import ColorType
 
-from .model import SeriesData
+from .model import FigureSpec, PanelSpec, SeriesData
 from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes
 from .qt_toolbar import install_toolbar_toggle
 
@@ -71,7 +74,7 @@ class DataCursor:
             x0: float,
             y0: float,
             series_idx: int,
-            color: str,
+            color: ColorType,
             role: str,
         ) -> None:
             self.ax = ax
@@ -112,7 +115,7 @@ class DataCursor:
         cursor: DataCursor.Cursor
         current_index: int
         series_idx: int
-        color: str
+        color: ColorType
         role: str
         marker_visible: bool
         tooltip_visible: bool
@@ -690,6 +693,8 @@ class AxesLayoutManager:
         visible_states = [
             state for state in self._states.values() if state.visible
         ]
+        if not visible_states:
+            return
         left = min(state.active_position[0] for state in visible_states)
         bottom = min(state.active_position[1] for state in visible_states)
         right = max(
@@ -874,6 +879,11 @@ class FigureDispatcher:
             controller = self._by_axes.get(event.inaxes)
         if controller is None:
             self._pending_axes_click = None
+            if (event.inaxes in self.layout.axes
+                    and event.inaxes.get_visible()
+                    and getattr(event, "button", None) == 1
+                    and getattr(event, "dblclick", False)):
+                self.layout.toggle(event.inaxes)
             return
         if getattr(event, "button", None) == 1 and getattr(
             event, "dblclick", False
@@ -1045,90 +1055,113 @@ class PlotSession:
 
 
 def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
-    """Construct an interactive plot without displaying or blocking."""
-
+    """Construct a plot using the original data-driven layout and defaults."""
     series_items = list(series)
     if not series_items:
         raise ValueError("create_interactive_plot requires at least one series")
-
-    row_count = max(item.panel[0] for item in series_items) + 1
-    column_count = max(item.panel[1] for item in series_items) + 1
-    figure, axes_grid = plt.subplots(
-        row_count, column_count, squeeze=False,
-        figsize=(6 * column_count, max(4, 10 * row_count / 3)),
-        facecolor=CANVAS,
+    grouped: dict[tuple[int, int], list[SeriesData]] = {}
+    for item in series_items:
+        grouped.setdefault(item.panel, []).append(item)
+    panels = tuple(
+        PanelSpec(
+            panel=position, series=tuple(items),
+            title=next((item.panel_title for item in items if item.panel_title), ""),
+            xlabel="Frame Number", ylabel="Value",
+        )
+        for position, items in grouped.items()
     )
+    return _build_figure(FigureSpec(
+        rows=max(item.panel[0] for item in series_items) + 1,
+        cols=max(item.panel[1] for item in series_items) + 1,
+        panels=panels,
+    ))
+
+
+def _build_figure(spec: FigureSpec) -> PlotSession:
+    """Render a complete description and install one interaction dispatcher."""
+    # ioff prevents notebook/interactive callers from opening a window during build.
+    with plt.ioff():
+        figure = plt.figure(
+            figsize=spec.figsize or (6 * spec.cols, max(4, 10 * spec.rows / 3)),
+            facecolor=CANVAS,
+        )
     controllers: list[DataCursor] = []
     axes: list[Axes] = []
     legends: list[Legend] = []
+    dispatcher = None
     try:
+        axes_grid = figure.subplots(spec.rows, spec.cols, squeeze=False)
         families = font_families()
-        grouped: dict[tuple[int, int], list[SeriesData]] = {}
-        for item in series_items:
-            grouped.setdefault(item.panel, []).append(item)
-
-        for row in range(row_count):
-            for column in range(column_count):
+        grouped = {panel.panel: panel for panel in spec.panels}
+        if spec.title:
+            figure.suptitle(spec.title, fontsize=14, fontweight="semibold",
+                            color=TEXT, fontfamily=families)
+        for row in range(spec.rows):
+            for column in range(spec.cols):
                 ax = axes_grid[row, column]
                 axes.append(ax)
-                panel_series = grouped.get((row, column), [])
-                if not panel_series:
+                panel = grouped.get((row, column))
+                if panel is None:
                     ax.set_visible(False)
                     continue
-
                 style_axes(ax, families)
-
-                for item in panel_series:
-                    line_kwargs = {
-                        "alpha": item.line_alpha, "zorder": 2,
-                        "color": item.line_color if item.line_color is not None
-                        else item.color,
-                        "linewidth": 1.35, "solid_capstyle": "round",
-                    }
+                handles = []
+                labels = []
+                for item in panel.series:
+                    line_color = (item.line_color if item.line_color is not None
+                                  else item.color)
                     ax.plot(
-                        item.frames,
-                        item.plotting_values,
-                        label=item.label,
-                        **line_kwargs,
+                        item.frames, item.plotting_values,
+                        label=item.label, color=line_color, alpha=item.line_alpha,
+                        linestyle=item.linestyle, linewidth=item.linewidth,
+                        solid_capstyle="round", zorder=2,
                     )
-                    ax.scatter(
-                        item.frames[item.valid_mask],
-                        item.values[item.valid_mask],
-                        c=item.color,
-                        s=10,
-                        linewidths=0,
-                        zorder=3,
-                        alpha=0.75,
-                    )
-                controller = DataCursor(ax, panel_series)
-                controllers.append(controller)
-                panel_title = next(
-                    (item.panel_title for item in panel_series if item.panel_title),
-                    None,
-                )
-                if panel_title:
-                    ax.set_title(panel_title, pad=9, fontsize=11,
+                    if item.marker is not None:
+                        ax.scatter(
+                            item.frames[item.valid_mask], item.values[item.valid_mask],
+                            color=item.color, marker=item.marker,
+                            s=item.markersize ** 2,
+                            # Unfilled symbols (+, x, etc.) need a visible stroke.
+                            linewidths=0 if MarkerStyle(item.marker).is_filled() else 1,
+                            zorder=3, alpha=0.75,
+                        )
+                    if item.label:
+                        handles.append(Line2D(
+                            [], [], color=line_color, alpha=item.line_alpha,
+                            linestyle=item.linestyle, linewidth=item.linewidth,
+                            marker=item.marker or "None", markersize=item.markersize,
+                            markerfacecolor=item.color, markeredgecolor=item.color,
+                        ))
+                        labels.append(item.label)
+                if panel.series:
+                    controllers.append(DataCursor(ax, panel.series))
+                if panel.title:
+                    ax.set_title(panel.title, pad=9, fontsize=11,
                                  fontweight="semibold", color=TEXT,
                                  fontfamily=families)
                     ax.title.set_horizontalalignment("left")
                     ax.title.set_x(0)
-                ax.set_xlabel("Frame Number")
-                ax.set_ylabel("Value")
-                legend = ax.legend(
-                    loc="upper right", prop={"family": families, "size": 8},
-                    facecolor="white", edgecolor=BORDER, framealpha=0.95,
-                    labelcolor=TEXT, borderpad=0.7, labelspacing=0.45,
-                    handlelength=2, handletextpad=0.7,
-                )
-                legend.get_frame().set_linewidth(0.6)
-                legend.set_draggable(True)
-                legends.append(legend)
+                ax.set_xlabel(panel.xlabel)
+                ax.set_ylabel(panel.ylabel)
+                if handles:
+                    legend = ax.legend(
+                        handles=handles, labels=labels,
+                        loc="upper right", prop={"family": families, "size": 8},
+                        facecolor="white", edgecolor=BORDER, framealpha=0.95,
+                        labelcolor=TEXT, borderpad=0.7, labelspacing=0.45,
+                        handlelength=2, handletextpad=0.7,
+                    )
+                    legends.append(legend)
+                    legend.get_frame().set_linewidth(0.6)
+                    legend.set_draggable(True)
 
         figure.tight_layout(pad=1.4, h_pad=1.7, w_pad=1.7)
         install_toolbar_toggle(figure)
         dispatcher = FigureDispatcher(figure, controllers, axes)
         return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
     except Exception:
+        if dispatcher is not None:
+            dispatcher.disconnect()
         for controller in controllers:
             controller.disconnect()
         for legend in legends:

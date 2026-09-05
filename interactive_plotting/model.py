@@ -1,6 +1,7 @@
-"""Temporary internal plotting model at the future adapter boundary."""
+"""Normalized plotting data and internal figure descriptions."""
 
 from dataclasses import dataclass
+from matplotlib.typing import ColorType
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
@@ -17,10 +18,14 @@ class SeriesData:
     values: ArrayLike
     label: str
     panel: tuple[int, int] = (0, 0)
-    color: str = "red"
+    color: ColorType = "red"
     panel_title: str | None = None
-    line_color: str | None = None
+    line_color: ColorType | None = None
     line_alpha: float = 1.0
+    marker: str | None = "o"
+    linestyle: str = "-"
+    linewidth: float = 1.35
+    markersize: float = 10 ** 0.5
 
     def __post_init__(self) -> None:
         try:
@@ -86,3 +91,25 @@ class SeriesData:
         values = np.array(self.values, copy=True)
         values[~self.valid_mask] = np.nan
         return values
+
+
+@dataclass(frozen=True, slots=True)
+class PanelSpec:
+    """One explicitly present panel, including panels without data."""
+
+    panel: tuple[int, int]
+    series: tuple[SeriesData, ...] = ()
+    title: str = ""
+    xlabel: str = ""
+    ylabel: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class FigureSpec:
+    """Complete construction input shared by public and compatibility callers."""
+
+    rows: int
+    cols: int
+    panels: tuple[PanelSpec, ...]
+    title: str = ""
+    figsize: tuple[float, float] | None = None

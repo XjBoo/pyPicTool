@@ -3,7 +3,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .core import PlotSession, create_interactive_plot
+from .core import PlotSession
+from .api import figure
 from .model import SeriesData
 
 
@@ -49,6 +50,12 @@ def make_demo_series(seed=None) -> list[SeriesData]:
 def show_demo() -> PlotSession:
     """Build and show the artificial six-panel demo for manual testing."""
 
-    session = create_interactive_plot(make_demo_series())
+    description = figure(rows=3, cols=2)
+    for item in make_demo_series():
+        description.subplot(
+            item.panel[0] * 2 + item.panel[1] + 1,
+            title=item.panel_title, xlabel="Frame Number", ylabel="Value",
+        ).plot(item.frames, item.values, label=item.label, color=item.color)
+    session = description.build()
     plt.show()
     return session
