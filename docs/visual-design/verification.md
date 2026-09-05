@@ -112,3 +112,7 @@ CUA 的 AX 复选框动作可能只改变 Qt 工具栏按钮勾选外观，验�
 独立 Reviewer（未参与实现，只读）重读全部规格工件与运行代码，核实 `toolbar.mode` 枚举用法、Qt 对象保活链、Agg 不加载 Qt、close 幂等、figsize、zorder 优先级与字体回退等关键点。结论：无 Critical、无 Important；确认 7 项 Minor（M1 ToolbarToggle 保活注释/显式引用、M2 probe 缺直接收起路径与钉选断言、M3 Agg 不加载 Qt 缺持久回归、M4 标题断言仅查非空、M5 probe 子进程未固定 MPLCONFIGDIR 且 timeout 偏紧、M6 qt_toolbar 无类型注解、M7 按钮/图例遮挡并入 5.2 清单）。逐项核实均成立，无误报；用户选择全部修复。
 
 修复 M1–M6：qt_toolbar.py 显式持有 `canvas._toolbar_toggle` 引用并注明保活链、补全类型注解（M1/M6，行为等价）；probe 增加 Shift 钉选保留断言与“展开后未启用 pan/zoom 直接收起”路径（M2）；test_visual_presentation.py 新增 Agg 会话不加载 `matplotlib.backends.qt_compat` 的持久回归并将标题断言改为逐字相等（M3/M4）；test_qt_toolbar.py 子进程固定仓库 MPLCONFIGDIR、timeout 放宽至 120 s（M5）；M7 写入任务 5.2 验收清单。修复后完整 63 项测试（含扩展 probe 子进程）、Hover 冒烟及 OpenSpec 校验重跑均退出 0。任务 2.3/3.3/5.2 的真实 GUI 与 Windows 实机缺口保持未完成，不归档；修复提交后由新的独立 Reviewer 复审完整范围。
+
+### 复审闭环与第二轮 Minor
+
+复审（固定范围 `1089e2a..47ff35b`）确认 M1–M7 七项全部闭环，无新增 Critical/Important，另确认 2 项 Minor：N1 保活注释表述问题、N2 install 幂等防护缺失。两轮 Reviewer 对 PySide6 信号连接保活语义表述相反，本轮以实验裁决：PySide6 中连接到信号后 `del` 接收者并 `gc.collect()`，weakref 显示对象已被回收——信号连接不保活 Python 接收者，N1 成立（第一轮对 M1 机制的"信号连接保活"解释证伪，显式引用修复因此必要），N2 成立（防御性）。用户授权修复：qt_toolbar.py 改写保活注释为经实验验证的准确表述，并增加 `hasattr` 幂等短路；运行行为不变。修复后完整 63 项测试、Hover 冒烟、OpenSpec 校验及 `git diff --check` 重跑均退出 0。任务 2.3/3.3/5.2 的真实 GUI 与 Windows 实机缺口保持未完成，不归档。

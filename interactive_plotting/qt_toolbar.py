@@ -6,6 +6,9 @@ from matplotlib.figure import Figure
 def install_toolbar_toggle(figure: Figure) -> None:
     """Collapse native Qt navigation without loading Qt on headless backends."""
     canvas = figure.canvas
+    # Idempotence guard: never install a second overlapping toggle button.
+    if getattr(canvas, "_toolbar_toggle", None) is not None:
+        return
     manager = getattr(canvas, "manager", None)
     toolbar = getattr(manager, "toolbar", None)
     if toolbar is None or not hasattr(toolbar, "toggleViewAction"):
@@ -60,8 +63,9 @@ def install_toolbar_toggle(figure: Figure) -> None:
             canvas.setFocus()
 
     toolbar.hide()
-    # Qt parent ownership retains the C++ control for the canvas lifetime.
-    # The Python wrapper is only kept alive by the signal connections above
-    # (installEventFilter holds a weak reference); keep an explicit reference
-    # so a future refactor cannot silently drop the resize event filter.
+    # Qt parent ownership keeps the C++ control alive for the canvas lifetime.
+    # PySide6 signal connections do NOT keep the Python wrapper alive: a
+    # connected receiver stays collectible (verified with weakref + gc).
+    # This explicit reference is the keep-alive guarantee; without it the
+    # event filter would be silently dropped on garbage collection.
     canvas._toolbar_toggle = ToolbarToggle()
