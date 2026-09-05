@@ -1,5 +1,6 @@
 """Behavior checks for presentation compatibility, independent of exact pixels."""
 import unittest
+from copy import deepcopy
 from unittest.mock import patch
 
 import matplotlib
@@ -8,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import to_rgba
 from matplotlib.backend_bases import MouseEvent
+from matplotlib import font_manager
 from interactive_plotting import SeriesData, create_interactive_plot, make_demo_series
 from tests.test_public_api import send_mouse_event, send_key_event
 
@@ -60,8 +62,13 @@ class PresentationTests(unittest.TestCase):
         self.assertFalse(session.controllers[0].is_dragging)
 
     def test_font_fallback_and_late_tooltip_leave_global_defaults_unchanged(self):
-        before = dict(plt.rcParams)
-        with patch('interactive_plotting.style.font_manager.fontManager.ttflist', []):
+        before = deepcopy(dict(plt.rcParams))
+        # Simulate missing optional system fonts, not a broken Matplotlib install.
+        bundled_fonts = [font for font in font_manager.fontManager.ttflist
+                         if font.name == 'DejaVu Sans']
+        self.assertTrue(bundled_fonts)
+        with patch('interactive_plotting.style.font_manager.fontManager.ttflist',
+                   bundled_fonts):
             session = self.make_session([
                 SeriesData([0, 1, 2], [-1, 0, 1], 'fallback', panel_title='Fallback')
             ])
