@@ -6,43 +6,48 @@
 
 ## Requirements
 
-### Requirement: 键盘移动点击选中的游标
+### Requirement: 键盘移动最近点击选中的点
 
-系统 SHALL 仅对最近被鼠标左键点击选中的游标（数据点左键点击、Shift+左键新增、或左键点击其 tooltip）响应 Left/Right/Home/End：方向键移动到本系列的上一/下一有效数据点，Home/End 跳转到第一个/最后一个有效数据点。该移动 SHALL 不受游标锁定状态限制。仅经悬停选中的游标 SHALL 不响应这些按键；悬停改变当前选中（金色高亮）游标 SHALL 不改变键盘移动的目标。未发生任何左键点击时，这些按键 SHALL 不产生游标移动。键盘移动 SHALL 不移动其他系列的任何游标。
+系统 SHALL 仅对最近被鼠标左键点击选中的点（普通活动选中、Shift+左键新增的钉选点，或左键点击其 tooltip）响应 Left/Right/Home/End：方向键移动到本系列的上一/下一有效数据点，Home/End 跳转到第一个/最后一个有效数据点。仅经悬停预览的点 SHALL NOT 响应这些按键；悬停变化预览点 SHALL NOT 改变键盘移动目标。未发生任何左键点击时，这些按键 SHALL NOT 移动任何点。
 
-#### Scenario: 点击锁定后的游标可被方向键移动
+#### Scenario: 普通选中点可被方向键移动
 
-- **WHEN** 用户左键点击数据点使该游标进入锁定状态后按 Right
-- **THEN** 选中的游标移动到本系列下一个有效数据点
+- **WHEN** 用户普通左键点击数据点后按 Right
+- **THEN** 活动选中移动到本系列下一个有效数据点
 
-#### Scenario: 悬停选中不足以启用键盘移动
+#### Scenario: 钉选点可被方向键移动
 
-- **WHEN** 用户仅悬停选中某游标（未发生任何左键点击）后按 Left/Right/Home/End
-- **THEN** 所有游标保持原位
+- **WHEN** 用户经 Shift+左键新增钉选点后按 Right
+- **THEN** 该钉选点及其 tooltip 移动到本系列下一个有效数据点
+
+#### Scenario: 悬停预览不启用键盘移动
+
+- **WHEN** 用户仅悬停预览某点，未发生左键点击，随后按 Left/Right/Home/End
+- **THEN** 所有活动选中和钉选点保持原位
 
 #### Scenario: 键盘目标不随悬停切换
 
-- **WHEN** 用户左键点击游标 A 后悬停使金色高亮落到游标 B，再按方向键
-- **THEN** 游标 A 移动，其他游标保持原位，游标 B 不作为键盘移动的目标
+- **WHEN** 用户左键点击点 A 后悬停预览点 B，再按方向键
+- **THEN** 点 A 移动，点 B 不作为键盘移动目标
 
 #### Scenario: 未发生点击时按键不移动
 
 - **WHEN** 尚无任何左键点击发生时按 Left/Right/Home/End
-- **THEN** 所有游标保持原位
+- **THEN** 所有标记保持原位
 
 ### Requirement: tooltip 跟随键盘移动
 
-当前持有图上唯一可见 tooltip 的选中游标被键盘移动时，tooltip SHALL 跟随移动到新的数据点，其 Frame/Value 文本 SHALL 刷新为新位置的数值。鼠标悬停 SHALL 不移动任何 tooltip 的锚点。
+当前键盘目标被移动时，其 tooltip SHALL 跟随移动到新的数据点，其 Frame/Value 文本 SHALL 刷新为新位置的数值。其他活动或钉选 tooltip SHALL 保持在原位。鼠标悬停 SHALL NOT 移动任何 tooltip 的锚点。
 
 #### Scenario: 方向键移动后 tooltip 显示新位置
 
 - **WHEN** 用户点击数据点出现 tooltip 后按 Right
-- **THEN** tooltip 锚定到新数据点，文本显示新点的 Frame/Value
+- **THEN** 键盘目标的 tooltip 锚定到新数据点并显示新点的 Frame/Value，其他 tooltip 保持不变
 
 #### Scenario: 悬停不拖动 tooltip
 
-- **WHEN** tooltip 可见时鼠标在图内悬停移动
-- **THEN** tooltip 锚点保持在其点击时的数据点（锁定游标）或既有非锁定游标行为不变
+- **WHEN** 图上存在活动选中或钉选 tooltip 时鼠标在图内悬停移动
+- **THEN** 所有 tooltip 的锚点保持在各自的点击或键盘移动位置
 
 ### Requirement: 键盘导航与默认视图键位隔离
 
@@ -58,11 +63,11 @@
 - **WHEN** 交互绘图会话断开或关闭
 - **THEN** matplotlib 默认键位绑定恢复原状，后续新建的普通 figure 行为不受影响
 
-### Requirement: 锁定游标忽略悬停跟随
+### Requirement: 持久选中不阻塞悬停预览
 
-鼠标悬停 SHALL 不移动任何锁定游标；锁定游标仅可被键盘（选中时）或点击解锁后移动。
+活动选中或钉选点存在时，鼠标悬停 SHALL 仍能预览任意系列的其他数据点。悬停预览 SHALL NOT 移动、隐藏或改变已有活动选中或钉选点的 tooltip。
 
-#### Scenario: 悬停不拖动锁定游标
+#### Scenario: 同系列已选中后仍可悬停其他点
 
-- **WHEN** 某游标处于锁定状态且鼠标贴近其所属系列的数据点悬停
-- **THEN** 该游标保持原位，仅选中高亮可随悬停变化
+- **WHEN** 某系列已有活动选中或钉选点，鼠标移到该系列的另一数据点
+- **THEN** 另一数据点显示悬停预览高亮，已选中或钉选点保持原位和可见
