@@ -30,7 +30,7 @@ def make_demo_series(seed=None) -> list[SeriesData]:
                     label="Sine signal",
                     panel=panel,
                     color="#3478A8",
-                    panel_title=f"{signal_number:02d}   Signal comparison",
+                    panel_title="Signal comparison",
                 ),
                 SeriesData(
                     frames=frames,
@@ -38,7 +38,7 @@ def make_demo_series(seed=None) -> list[SeriesData]:
                     label="Cosine signal",
                     panel=panel,
                     color="#D58945",
-                    panel_title=f"{signal_number:02d}   Signal comparison",
+                    panel_title="Signal comparison",
                 ),
             ]
         )
