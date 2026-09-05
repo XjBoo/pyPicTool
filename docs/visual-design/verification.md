@@ -118,3 +118,9 @@ CUA 的 AX 复选框动作可能只改变 Qt 工具栏按钮勾选外观，验�
 复审（固定范围 `1089e2a..47ff35b`）确认 M1–M7 七项全部闭环，无新增 Critical/Important，另确认 2 项 Minor：N1 保活注释表述问题、N2 install 幂等防护缺失。两轮 Reviewer 对 PySide6 信号连接保活语义表述相反，本轮以实验裁决：PySide6 中连接到信号后 `del` 接收者并 `gc.collect()`，weakref 显示对象已被回收——信号连接不保活 Python 接收者，N1 成立（第一轮对 M1 机制的"信号连接保活"解释证伪，显式引用修复因此必要），N2 成立（防御性）。用户授权修复：qt_toolbar.py 改写保活注释为经实验验证的准确表述，并增加 `getattr(canvas, "_toolbar_toggle", None) is not None` 幂等短路；运行行为不变。修复后完整 63 项测试、Hover 冒烟、OpenSpec 校验及 `git diff --check` 重跑均退出 0。任务 2.3/3.3/5.2 的真实 GUI 与 Windows 实机缺口保持未完成，不归档。
 
 第三轮复审确认 N1/N2 闭环，无新增 Critical/Important；其指出的记录措辞问题（机制名 hasattr→getattr、顶部表格轮次标注）已照其修复方向订正，无代码改动。剩余可选后续事项：为幂等短路路径增加 probe 回归断言（Minor-2，可选加固，不影响闭环判定）。
+
+### 用户验收与归档决定（2026-09-05）
+
+- 真实 GUI 人工验收：用户在真实桌面环境完成 `venv/bin/python interactive_plot.py` 的人工验收，声明通过，覆盖任务 2.3 与 5.2 的 GUI 部分（含工具栏展开/收起与图例遮挡检查）。本记录按用户声明登记，此前 CUA 记录中未覆盖的场景以用户本次验收为准。
+- Windows 实机验收：用户决定延后统一执行，本轮明确不作为归档前置条件。design.md 已声明真实 Windows 检查不是本地实现完成的必需门槛；README 与本记录保留"未实测、不得声称 Windows 通过"的边界声明。
+- 归档决定：用户确认归档 `refine-plot-visual-design`，delta specs（新增 plot-visual-presentation capability）按默认流程同步至主 specs。最终 checkpoint：`7336dadd70d0e74e7d0aba729103adca977e617a`。

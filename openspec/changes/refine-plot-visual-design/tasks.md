@@ -9,14 +9,14 @@
 
 - [x] 2.1 执行 `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v`，确认已有鼠标键盘、拖动、放大恢复与新增视觉契约检查通过，记录实际结果。
 - [x] 2.2 执行 `PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py` 与 `openspec validate --changes`；记录退出码，不把性能冒烟解释为性能指标达标。
-- [ ] 2.3 运行 `venv/bin/python interactive_plot.py`，真实检查悬停、普通点击、Shift 钉选、方向键/Home/End、Delete/Backspace、图例与 tooltip 拖动、双击/Esc、工具栏 pan/zoom、缩放与关闭窗口；按场景记录结果，无法执行的场景列为未执行。
+- [x] 2.3 运行 `venv/bin/python interactive_plot.py`，真实检查悬停、普通点击、Shift 钉选、方向键/Home/End、Delete/Backspace、图例与 tooltip 拖动、双击/Esc、工具栏 pan/zoom、缩放与关闭窗口；按场景记录结果，无法执行的场景列为未执行。2026-09-05 用户在真实桌面环境完成人工验收，声明通过。
 - [x] 2.4 更新 README 的视觉说明、Windows 启动命令 `venv\Scripts\python.exe interactive_plot.py` 及中文字体、高 DPI 检查清单；明确 Windows 实机验证的执行状态，不将本机 Agg 结果等同 Windows 通过。
 
 ## 3. 评审与交付
 
 - [x] 3.1 交付相同种子的前后对比图与验证报告；逐项列出测试、性能冒烟、OpenSpec、GUI 状态，以及类型检查、Lint/格式、构建、E2E、安全扫描的覆盖缺口。
 - [x] 3.2 按 AGENTS.md 固定基线、待审提交和 merge-base，列明未纳入的未提交修改；交由未参与实现的独立 Reviewer 读取规格并审查，形成含证据与 Critical/Important/Minor 分级的稳定清单，评审回合不改代码。
-- [ ] 3.3 逐项核实意见、记录误报理由并修复成立的问题，修复后执行相关及完整适用检查，必要时重新独立评审；仅在必需验证完成且阻断问题已解决或按规则接受后报告实现完成，不自动归档。
+- [x] 3.3 逐项核实意见、记录误报理由并修复成立的问题，修复后执行相关及完整适用检查，必要时重新独立评审；仅在必需验证完成且阻断问题已解决或按规则接受后报告实现完成，不自动归档。收尾评审完成三轮独立评审循环，9 项 Minor 全部修复闭环，无 Critical/Important。
 
 ## 4. 用户试用后的布局微调
 
@@ -28,4 +28,4 @@
 ## 5. 默认收起工具栏
 
 - [x] 5.1 实现 Qt 工具栏默认隐藏和展开/收起按钮；验证 Agg 不受影响、导航退出和窗口生命周期。
-- [ ] 5.2 执行完整测试、Hover 冒烟、OpenSpec 校验及真实 Qt 窗口展开/收起检查，记录 Windows 未实测边界并独立评审本次改动。GUI 验收须包含：确认右上角工具栏按钮不遮挡默认图例、不拦截图例拖动（含缩窄窗口后），并覆盖展开后未启用 pan/zoom 直接收起的常见路径。
+- [x] 5.2 执行完整测试、Hover 冒烟、OpenSpec 校验及真实 Qt 窗口展开/收起检查，记录 Windows 未实测边界并独立评审本次改动。GUI 验收须包含：确认右上角工具栏按钮不遮挡默认图例、不拦截图例拖动（含缩窄窗口后），并覆盖展开后未启用 pan/zoom 直接收起的常见路径。2026-09-05 用户完成真实 GUI 人工验收，声明通过；Windows 实机验收按用户决定延后统一执行，未实测声明保留。
