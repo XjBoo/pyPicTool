@@ -102,3 +102,5 @@ CUA 的 AX 复选框动作可能只改变 Qt 工具栏按钮勾选外观，验�
 本轮完整 unittest 62 项通过（退出 0，含独立子进程的 Qt offscreen probe）；Hover benchmark、OpenSpec 校验及 diff 检查通过。Qt probe 验证初始隐藏、展开/收起、pan/zoom 退出、widgetlock 释放、视图和选中保留、键盘移动、放大恢复、resize、导出及重复 close。类型/Lint/构建/独立E2E/安全扫描仍为既有覆盖缺口。
 
 实际运行 `venv/bin/python interactive_plot.py` 启动了新窗口；CUA 按应用名及路径定位时返回另一个已存在的旧 Python 绘图进程（无新按钮），未对旧窗口执行操作。因此本轮真实鼠标展开/收起未验收，Qt offscreen 结果不冒充实机通过；Windows 亦未实测。任务 5.2 保留未完成，既有 2.3/3.3 状态不变，不归档。
+
+工具栏独立评审范围：`3672c6f6a17f56127214f213f233006d1bed493a..333700849204b48a52b6c510bb77c1942f0cfdc0`，评审时工作区干净。Reviewer 未发现 Critical/Important 代码缺陷；其完整 62 项测试、独立 Qt probe、额外 Agg 未加载 Qt 检查、benchmark 和 OpenSpec 均通过。Minor 指出直接注入 Matplotlib 键盘事件不能证明 Qt 焦点，已核实成立并在收起后的 Qt probe 增加 `canvas.hasFocus()` 断言；相关检查及完整 62 项、benchmark、OpenSpec、diff 检查再次通过。该后续改动仅为测试断言与记录，不修改运行代码。已另外查看 offscreen 原生窗口在收起/展开时的渲染，按钮位于右上角；此渲染不替代真实桌面验收，5.2 的 GUI 部分仍保留未完成。

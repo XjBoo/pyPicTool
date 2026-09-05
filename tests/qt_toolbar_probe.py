@@ -40,6 +40,7 @@ def main():
         button.click()
         app.processEvents()
         assert toolbar.isHidden() and not toolbar.mode
+        assert canvas.hasFocus()
         assert not canvas.widgetlock.locked()
         assert (axis.get_xlim(), axis.get_ylim()) == limits
         assert session.controllers[0].active_selection is selected
