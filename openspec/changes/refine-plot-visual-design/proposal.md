@@ -11,6 +11,8 @@
 - 使用 Matplotlib 自带字体及 Windows 中文字体回退，不引入平台专属路径、新 GUI 框架或外部字体下载。
 - 固定随机种子生成前后对比图，执行已有交互回归并记录 QtAgg 与 Windows 验证边界。
 
+- Qt 绘图窗口顶部工具栏默认隐藏，画布右上角小按钮可展开/收起；收起时退出平移/缩放，恢复数据交互。
+
 ## Capabilities
 
 ### New Capabilities

@@ -147,3 +147,10 @@ Windows acceptance checklist (not yet tested on a Windows machine):
 
 See [visual examples and verification](docs/visual-design/verification.md) for
 actual checks and remaining platform limitations.
+
+The Qt navigation toolbar starts hidden. Click **工具栏** in the upper-right
+corner of the canvas to show it, and click again to collapse it. Collapsing exits
+pan/zoom mode so data-point interaction resumes; the current view and selections
+are retained. This native window button does not appear in saved images. Agg
+plots have no window controls. The test suite runs a separate Qt offscreen probe
+for this control; that automated probe does not replace real desktop validation.

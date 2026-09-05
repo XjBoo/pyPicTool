@@ -14,6 +14,7 @@ from matplotlib.legend import Legend
 
 from .model import SeriesData
 from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes
+from .qt_toolbar import install_toolbar_toggle
 
 # Keyboard cursor navigation owns keys that Matplotlib's default keymap binds
 # to navigation-toolbar view history (back/forward/home). Sessions claim the
@@ -1124,6 +1125,7 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
                 legends.append(legend)
 
         figure.tight_layout(pad=1.4, h_pad=1.7, w_pad=1.7)
+        install_toolbar_toggle(figure)
         dispatcher = FigureDispatcher(figure, controllers, axes)
         return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
     except Exception:

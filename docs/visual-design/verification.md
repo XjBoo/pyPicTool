@@ -94,3 +94,11 @@ CUA 的 AX 复选框动作可能只改变 Qt 工具栏按钮勾选外观，验�
 按用户反馈，标题改为 11 pt、标题间距 9 pt，tight_layout 外边距 1.4、行列间距 1.7，刻度间距 4 pt、轴标签间距 5 pt；保留无序号标题。固定 seed=42、12×10 英寸的单面板面积为 0.10103719，比初版增加约 17.9%，介于前两版之间。已查看更新后的六面板渲染，更新全部当前效果图。
 
 本轮完整 unittest 61 项、Hover benchmark、OpenSpec 校验均退出 0。仅调整静态样式参数，未变更交互逻辑；GUI/Windows 未在本轮重新执行，既有缺口仍保留，前述独立评审范围不覆盖本轮微调。本次追加任务 4.3 完成，整体 12/14，未归档。
+
+### 工具栏默认隐藏
+
+本轮加入 Qt 原生右上角“工具栏”按钮：默认隐藏原生导航栏，点击展开/收起，收起时解除 pan/zoom。按钮由画布拥有，随 resize 定位，不绘入导出图片；Agg 不加载此 Qt 控件。README 和 OpenSpec 规格、设计已同步。
+
+本轮完整 unittest 62 项通过（退出 0，含独立子进程的 Qt offscreen probe）；Hover benchmark、OpenSpec 校验及 diff 检查通过。Qt probe 验证初始隐藏、展开/收起、pan/zoom 退出、widgetlock 释放、视图和选中保留、键盘移动、放大恢复、resize、导出及重复 close。类型/Lint/构建/独立E2E/安全扫描仍为既有覆盖缺口。
+
+实际运行 `venv/bin/python interactive_plot.py` 启动了新窗口；CUA 按应用名及路径定位时返回另一个已存在的旧 Python 绘图进程（无新按钮），未对旧窗口执行操作。因此本轮真实鼠标展开/收起未验收，Qt offscreen 结果不冒充实机通过；Windows 亦未实测。任务 5.2 保留未完成，既有 2.3/3.3 状态不变，不归档。
