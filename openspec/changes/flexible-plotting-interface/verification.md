@@ -49,3 +49,15 @@
 - 本记录后续提交仅更新任务勾选和验证记录，不改变已审查的代码；不以这些文档更新触发无理由的重复测试。
 
 实现与规定自动化检查、适用桌面场景及独立审查已完成。上述能力缺口保留明确记录；本 change 未将这些缺失工具或 Windows 实机定义为必需验收条件。本次不归档、不合并或推送。
+
+## 收尾审查与修复（2026-09-06，finish-openspec-change 流程）
+
+- 固定范围：merge-base `c69ad1e` 到检查点 `945b99a`，审查时工作区干净，无排除修改。
+- 收尾主代理实测：单测 75 项通过（退出 0）、Hover 冒烟完整运行（退出 0）、`openspec validate --changes` 1 项通过（退出 0）。
+- 独立 Reviewer（未参与实现的新上下文，只读审查全部实现与规格产物）：Critical 0、Important 0、Minor 8。
+- 逐项处置：
+  - Minor 8（旧入口 panel_title 推导兼容性存疑）：拒绝。基线 `c69ad1e` core.py:1105-1106 与现实现的 `next((item.panel_title for item in ... if item.panel_title), "")` 表达式一致，无兼容偏差。
+  - Minor 1/2/3/5/6/7：成立并修复。linestyle 错误消息列全别名；README 补记 `"none"`/`""`；`plot` 文档注明默认 √10 对应 10 pt² 面积；总标题断言改用公开 `figure.texts`；`_MARKERS` 改为分组字面量；测试补 linestyle 文字别名正测试、显式 `label=""` 未命名行为与图例 handle 线宽/点尺寸断言。
+  - Minor 4（`FigureBuilder`/`Subplot` 包级导出以便类型注解）：成立但延后。design.md 明确保持最小公开接口，示例与文档不需要类名；待作为独立库发布或调用方需要类型标注时再评估。
+- 修复后全量重跑：单测 75 项通过（退出 0）、Hover 冒烟退出 0、OpenSpec 校验 1 项通过（退出 0）、`git diff --check` 退出 0。
+- 覆盖缺口沿用上文记录（mypy/Ruff/构建/E2E/安全扫描/Windows 实机均未配置或未执行），未新增缺口。

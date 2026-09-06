@@ -45,7 +45,7 @@ class FigureInterfaceTests(unittest.TestCase):
         self.assertEqual([ax.get_visible() for ax in first.axes], [False])
         self.assertEqual([ax.get_visible() for ax in session.axes], [True, False, True, True])
         np.testing.assert_array_equal(session.figure.get_size_inches(), [10, 8])
-        self.assertEqual(session.figure._suptitle.get_text(), "Overview")
+        self.assertIn("Overview", [t.get_text() for t in session.figure.texts])
         self.assertEqual(session.axes[2].get_title(), "Empty")
         self.assertIsNone(session.axes[2].get_legend())
         first.close()
@@ -76,8 +76,8 @@ class FigureInterfaceTests(unittest.TestCase):
         ax.plot([0, 1, 2], [1, np.nan, 3], label="Circle", color="blue",
                 marker="o", linewidth=2.5, markersize=7)
         ax.plot([0, 1, 2], [3, 2, 1], label="_Square", color="orange",
-                marker="s", linestyle="--")
-        ax.plot([0, 1, 2], [0, 1, 0], marker="^", linestyle="None")
+                marker="s", linestyle="dashed")
+        ax.plot([0, 1, 2], [0, 1, 0], marker="^", linestyle="None", label="")
         session = self.build(fig)
         actual = session.axes[0]
         self.assertEqual(len(session.controllers[0].series_list), 3)
@@ -94,6 +94,8 @@ class FigureInterfaceTests(unittest.TestCase):
                          ["Circle", "_Square"])
         self.assertEqual([handle.get_marker() for handle in actual.get_legend().legend_handles],
                          ["o", "s"])
+        self.assertEqual(actual.get_legend().legend_handles[0].get_linewidth(), 2.5)
+        self.assertEqual(actual.get_legend().legend_handles[0].get_markersize(), 7)
 
     def test_color_cycles_are_independent_and_unlabelled_has_no_legend(self):
         fig = figure(rows=1, cols=2)

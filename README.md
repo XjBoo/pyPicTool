@@ -45,7 +45,8 @@ For export without a GUI event loop, use `session.figure.savefig("result.png")`.
   Named curves appear in a draggable legend; unnamed curves do not.
 - Point symbols: `o s ^ v < > D d p h H * + x . , | _ 1 2 3 4 8 P X`.
   Use `marker=None` for a line alone. Line styles are `-`, `--`, `-.`, `:`
-  (or `solid`, `dashed`, `dashdot`, `dotted`); `"None"` hides the connecting line.
+  (or `solid`, `dashed`, `dashdot`, `dotted`); `"None"`, `"none"` or `""`
+  hides the connecting line.
   At least the line or points must be enabled. Line width and marker size are
   finite positive numbers in points.
 - The description creates no windows or event bindings. `build()` renders without

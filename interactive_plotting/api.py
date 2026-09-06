@@ -16,7 +16,8 @@ from .model import FigureSpec, PanelSpec, SeriesData
 
 _COLORS = ("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf")
-_MARKERS = frozenset("os^v<>Ddp hH*+x.,|_12348PX".replace(" ", ""))
+# Same symbols as the README listing, grouped for readability.
+_MARKERS = frozenset("os^v<>Ddp" "hH*+x.,|_" "12348PX")
 _LINESTYLES = {"-": "-", "--": "--", "-.": "-.", ":": ":",
                "solid": "-", "dashed": "--", "dashdot": "-.",
                "dotted": ":", "None": "None", "none": "None", "": "None"}
@@ -59,7 +60,8 @@ class Subplot:
         """Append one series, copying its data; return this subplot for chaining.
 
         Use marker=None for a line alone, linestyle="None" for points alone.
-        Sizes are in points. Missing y values break the line and skip points.
+        Sizes are in points; the default √10 keeps the marker area at 10 pt².
+        Missing y values break the line and skip points.
         Invalid data/styles raise ValueError without appending a partial series.
         """
         self._owner._require_mutable()
@@ -74,7 +76,8 @@ class Subplot:
         if marker is not None and (not isinstance(marker, str) or marker not in _MARKERS):
             raise ValueError("marker must be a supported point symbol or None")
         if not isinstance(linestyle, str) or linestyle not in _LINESTYLES:
-            raise ValueError("linestyle must be '-', '--', '-.', ':', or 'None'")
+            raise ValueError("linestyle must be '-', '--', '-.', ':', 'None', "
+                             "or a solid/dashed/dashdot/dotted alias")
         linestyle = _LINESTYLES[linestyle]
         if marker is None and linestyle == "None":
             raise ValueError("marker and linestyle cannot both be disabled")
