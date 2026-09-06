@@ -17,7 +17,17 @@
 
 ## 桌面检查
 
-初次在沙箱中启动 `MPLCONFIGDIR=.mplconfig venv/bin/python interactive_plot.py` 因 macOS 窗口服务连接失败退出 134；改用授权的桌面运行环境继续验证。实际交互结果待补充，不以 offscreen 结果代替真实桌面检查。
+初次在沙箱中启动 `MPLCONFIGDIR=.mplconfig venv/bin/python interactive_plot.py` 因 macOS 窗口服务连接失败退出 134；在授权的桌面运行环境重试后正常启动，关闭后退出 0。
+
+通过 CUA 在 macOS 的真实 QtAgg 窗口执行并观察以下场景：
+
+- 六子图演示：正常打开，默认工具栏收起，双击子图放大，Esc 恢复六子图；鼠标启用 Pan 后收起再展开工具栏，Pan 状态从 1 回到 0；正常关闭。
+- `MPLCONFIGDIR=.mplconfig venv/bin/python -m examples.flexible_plot`：显示两个独立窗口。单图的纯折线和 x 形散点、总标题、轴文字与图例正确；点击折线点后出现圆形焦点和 tooltip，Right 将 Frame 1.50 / Value 0.997 移到 Frame 2.00 / Value 0.909；tooltip 和图例均可拖动。
+- 关闭第二张图后，第一张图仍可见且响应工具栏展开操作；第一张图显示 2×2 稀疏布局、中文标题和自定义数据点。关闭全部窗口后进程退出 0。
+- 上述窗口切换后，CUA 的坐标点击曾报告 `noWindowsAvailable`，但 AX 控件操作仍有响应。未把工具故障视为绘图库失败；使用单独进程打开 2×2 自定义布局补测。
+- 单独的 2×2 自定义布局：方形数据点可点击并按 Right 移至下一点；双击含数据的子图放大，保留总标题、选择及 tooltip，Esc 恢复原稀疏布局。空子图同样可双击放大、Esc 恢复，原数据选择保留。正常关闭后退出 0。
+
+桌面未逐项重测 Shift+点击、Delete/Backspace、Home/End、缩放模式及不同 DPI；对应键盘/钉选/工具栏语义由现有 Agg 测试与 Qt offscreen 探针覆盖其适用场景，不宣称全部人工验收或 Windows 验收通过。
 
 ## 覆盖缺口
 
@@ -30,4 +40,12 @@
 
 ## 独立审查
 
-待固定提交后由未参与实现的 Reviewer 检查规格、兼容性和改动范围。尚不宣布 change 完成，不归档。
+独立 Reviewer `/root/review_flexible_plot` 使用不包含实现对话的新上下文，只读审查了全部实现变更及相关交互代码，并重新读取 change 规格。
+
+- 审查范围：merge-base `c69ad1ef5062917a22ab1bc737cc10b96fac7c78` 到 `adba1169b46ed672df1a608320425a6937ddda47`。
+- Critical：0；Important：0；Minor：0。未发现有充分证据支持的问题，无需进入代码修复回合。
+- Reviewer 独立执行规定测试：75 项通过，退出 0；性能冒烟两组完成，退出 0；OpenSpec 1 项通过，退出 0；固定范围 diff 空白检查退出 0。
+- Reviewer 补充逐一构建、Agg 绘制并关闭全部文档支持的 marker，未出现构建失败或遗留 figure。
+- 本记录后续提交仅更新任务勾选和验证记录，不改变已审查的代码；不以这些文档更新触发无理由的重复测试。
+
+实现与规定自动化检查、适用桌面场景及独立审查已完成。上述能力缺口保留明确记录；本 change 未将这些缺失工具或 Windows 实机定义为必需验收条件。本次不归档、不合并或推送。

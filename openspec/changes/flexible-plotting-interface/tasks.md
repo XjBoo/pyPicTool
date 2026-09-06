@@ -16,10 +16,10 @@
 - [x] 3.2 运行 MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v，记录退出码及测试结果。
 - [x] 3.3 运行 PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py，记录成功运行情况，不将冒烟结果解释为达到性能阈值。
 - [x] 3.4 运行 openspec validate --changes，记录结构校验结果。
-- [ ] 3.5 运行 venv/bin/python interactive_plot.py 并对自定义布局执行真实桌面检查，记录标题、图例、工具栏、光标交互、多窗口关闭及放大恢复场景；未能执行的场景明确标记未验证。
+- [x] 3.5 运行 venv/bin/python interactive_plot.py 并对自定义布局执行真实桌面检查，记录标题、图例、工具栏、光标交互、多窗口关闭及放大恢复场景；未能执行的场景明确标记未验证。
 
 ## 4. 独立审查和修复
 
-- [ ] 4.1 固定 merge-base 到待审提交的范围，由未参与实现的独立 Reviewer 依据本 change 规格审查，报告 Critical/Important/Minor 及证据，明确未提交修改是否排除。
-- [ ] 4.2 逐项验证审查问题后独立进入修复回合，记录成立、误报及需澄清项；修复后运行相关检查和适用完整检查，并对必要的新增改动重新审查。
-- [ ] 4.3 输出收尾记录，逐项报告测试、性能冒烟、OpenSpec、GUI 及类型检查、Lint、构建、E2E、安全扫描的结果或覆盖缺口；存在阻断问题或必需检查未完成时不宣布完成，不自动归档。
+- [x] 4.1 固定 merge-base 到待审提交的范围，由未参与实现的独立 Reviewer 依据本 change 规格审查，报告 Critical/Important/Minor 及证据，明确未提交修改是否排除。
+- [x] 4.2 逐项验证审查问题后独立进入修复回合，记录成立、误报及需澄清项；修复后运行相关检查和适用完整检查，并对必要的新增改动重新审查。
+- [x] 4.3 输出收尾记录，逐项报告测试、性能冒烟、OpenSpec、GUI 及类型检查、Lint、构建、E2E、安全扫描的结果或覆盖缺口；存在阻断问题或必需检查未完成时不宣布完成，不自动归档。
