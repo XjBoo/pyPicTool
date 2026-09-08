@@ -8,16 +8,21 @@ from typing import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.artist import Artist
 from matplotlib.backend_bases import CloseEvent, DrawEvent, KeyEvent, MouseEvent
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from matplotlib.markers import MarkerStyle
 from matplotlib.typing import ColorType
+from matplotlib.ticker import FixedLocator, FuncFormatter
+from matplotlib.transforms import Bbox
+from matplotlib import patheffects
+import warnings
 
-from .model import FigureSpec, PanelSpec, SeriesData
-from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes
-from .qt_toolbar import install_toolbar_toggle
+from .model import FigureSpec, PanelSpec, SeriesData, TooltipContext
+from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes, get_theme
+from .qt_toolbar import install_toolbar_toggle, install_series_selector
 
 # Keyboard cursor navigation owns keys that Matplotlib's default keymap binds
 # to navigation-toolbar view history (back/forward/home). Sessions claim the
@@ -27,6 +32,7 @@ _VIEW_NAVIGATION_KEY_REMOVALS: dict[str, tuple[str, ...]] = {
     "keymap.back": ("left", "backspace"),
     "keymap.forward": ("right",),
     "keymap.home": ("home",),
+    "keymap.yscale": ("l",),
 }
 _view_navigation_key_claims = 0
 _view_navigation_key_snapshots: dict[str, list[str]] | None = None
@@ -58,6 +64,58 @@ def _restore_view_navigation_keys() -> None:
         for setting, snapshot in (_view_navigation_key_snapshots or {}).items():
             plt.rcParams[setting] = list(snapshot)
         _view_navigation_key_snapshots = None
+
+
+class OverlayLegend(Legend):
+    """Keep Axes.get_legend/picking while drawing in the interaction layer."""
+
+    def draw(self, renderer):
+        layer = getattr(self, "_interaction_layer", None)
+        if layer is None or layer.drawing:
+            super().draw(renderer)
+
+
+class InteractionLayer(Artist):
+    """Draw interactive artists above both twin axes, preserving data transforms."""
+
+    def __init__(self, figure):
+        super().__init__()
+        self.items = []
+        self.drawing = False
+        self.set_zorder(10)
+        self.set_in_layout(False)
+        figure.add_artist(self)
+
+    def add(self, artist):
+        owner = artist.axes
+        is_legend = isinstance(artist, Legend)
+        artist.remove()
+        artist.axes = owner
+        artist.set_figure(self.figure)
+        self.items.append(artist)
+        if is_legend:
+            owner.legend_ = artist
+            artist._interaction_layer = self
+            artist.set_zorder(9)
+
+        def remove(item):
+            self.items.remove(item)
+            if is_legend and owner.get_legend() is item:
+                owner.legend_ = None
+
+        artist._remove_method = remove
+
+    def draw(self, renderer):
+        if not self.get_visible():
+            return
+        self.drawing = True
+        try:
+            for artist in sorted(self.items, key=lambda item: item.get_zorder()):
+                if artist.get_visible() and artist.axes.get_visible():
+                    artist.draw(renderer)
+        finally:
+            self.drawing = False
+        self.stale = False
 
 
 class DataCursor:
@@ -134,8 +192,10 @@ class DataCursor:
         hover_index: int
         hover_active: bool
 
-    def __init__(self, ax: Axes, series_list: Sequence[SeriesData]) -> None:
+    def __init__(self, ax: Axes, series_list: Sequence[SeriesData], layer=None) -> None:
         self.ax = ax
+        self.layer = layer
+        self.panel_axes = (ax,)
         self.series_list = tuple(series_list)
         self._disp_xy_list: list[np.ndarray] | None = None
         self._disp_indices_list: list[np.ndarray] | None = None
@@ -166,6 +226,8 @@ class DataCursor:
             zorder=6,
         )
         self.hover_highlight.set_visible(False)
+        if self.layer is not None:
+            self.layer.add(self.hover_highlight)
         self._hover_series_idx = 0
         self._hover_index = first_idx
         self._hover_active = False
@@ -266,7 +328,7 @@ class DataCursor:
                 best_d2 = min_distance_squared
                 best_series_idx = series_idx
                 best_local_idx = int(self._disp_indices_list[series_idx][min_idx])
-        return best_series_idx, best_local_idx, float(best_d2)
+        return best_series_idx, best_local_idx, float(best_d2) if best_d2 is not None else float("inf")
 
     def hide_hover(self) -> bool:
         """Hide the transient preview and restore persistent marker styling."""
@@ -350,6 +412,9 @@ class DataCursor:
             series.color,
             role,
         )
+        if self.layer is not None:
+            self.layer.add(cursor.highlight)
+            self.layer.add(cursor.tooltip)
         self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
         cursor.highlight.set_visible(True)
         return cursor
@@ -373,7 +438,19 @@ class DataCursor:
         cursor.tooltip.xy = (x_value, y_value)
         frame_text = self.ax.xaxis.get_major_formatter().format_data_short(x_value)
         value_text = self.ax.yaxis.get_major_formatter().format_data_short(y_value)
-        cursor.tooltip.set_text(f"Frame: {frame_text}\nValue: {value_text}")
+        text = f"Frame: {frame_text}\nValue: {value_text}"
+        if series.tooltip is not None:
+            try:
+                text = series.tooltip(TooltipContext(
+                    series, local_idx, x_value, y_value, frame_text, value_text,
+                ))
+                if not isinstance(text, str):
+                    raise TypeError("tooltip callback must return a string")
+            except Exception as error:
+                warnings.warn(f"tooltip callback failed for {series.label!r}: {error}",
+                              RuntimeWarning, stacklevel=2)
+                text = f"Frame: {frame_text}\nValue: {value_text}"
+        cursor.tooltip.set_text(text)
         cursor.tooltip.set_visible(True)
 
     def on_hover(self, event: MouseEvent) -> bool:
@@ -393,7 +470,7 @@ class DataCursor:
             )
             self.fig.canvas.draw_idle()
             return False
-        if event.inaxes is not self.ax:
+        if event.inaxes not in self.panel_axes:
             return self.hide_hover()
         if event.x is None or event.y is None:
             return False
@@ -449,7 +526,7 @@ class DataCursor:
                     self._drag_start_position = cursor.tooltip.get_position()
                     return cursor
 
-        if event.inaxes != self.ax:
+        if event.inaxes not in self.panel_axes:
             return
         if getattr(event, "button", None) != 1:
             return
@@ -619,8 +696,12 @@ class DataCursor:
             cursor = state.cursor
             if cursor.highlight.axes is None:
                 self.ax.add_line(cursor.highlight)
+                if self.layer is not None:
+                    self.layer.add(cursor.highlight)
             if cursor.tooltip.axes is None:
                 self.ax.add_artist(cursor.tooltip)
+                if self.layer is not None:
+                    self.layer.add(cursor.tooltip)
             cursor.series_idx = state.series_idx
             cursor.color = state.color
             cursor.highlight.set_color(state.color)
@@ -641,6 +722,33 @@ class DataCursor:
         self._dragging_cursor = None
         self._drag_start_mouse = None
         self._drag_start_position = None
+
+    def remove_series(self, index: int) -> None:
+        """Remove one series and only its selections; preserve other indices."""
+        self.hide_hover()
+        for cursor in list(self.cursors):
+            if cursor.series_idx == index:
+                cursor.highlight.remove()
+                cursor.tooltip.remove()
+                if cursor is self._active:
+                    self._active = None
+                if cursor in self._pinned:
+                    self._pinned.remove(cursor)
+                if cursor is self._selected:
+                    self._selected = None
+                if cursor is self._keyboard_target:
+                    self._keyboard_target = None
+                if cursor is self._dragging_cursor:
+                    self.on_release(None)
+            elif cursor.series_idx > index:
+                cursor.series_idx -= 1
+        self.series_list = self.series_list[:index] + self.series_list[index + 1:]
+        del self._valid_indices_list[index]
+        self._hover_series_idx = 0
+        self._hover_index = 0
+        self._disp_xy_list = None
+        self._disp_indices_list = None
+        self._invalidate_disp_cache()
 
     def disconnect(self) -> None:
         if not self._connected:
@@ -672,9 +780,10 @@ class AxesLayoutState:
 class AxesLayoutManager:
     """Maximize one axes inside a figure and restore the captured layout."""
 
-    def __init__(self, figure: Figure, axes: Sequence[Axes]) -> None:
+    def __init__(self, figure: Figure, axes: Sequence[Axes], groups=None) -> None:
         self.figure = figure
         self.axes = tuple(axes)
+        self.groups = groups or {axis: (axis,) for axis in axes}
         self._states: dict[Axes, AxesLayoutState] = {}
         self._maximized_position = (0.0, 0.0, 1.0, 1.0)
         self._capture_layout()
@@ -710,6 +819,7 @@ class AxesLayoutManager:
     def toggle(self, axis: Axes) -> bool:
         if axis not in self._states:
             raise ValueError("axis does not belong to this PlotSession")
+        axis = self.groups[axis][0]
         if self.maximized_axes is axis:
             self.restore()
             return False
@@ -718,10 +828,11 @@ class AxesLayoutManager:
         else:
             self._capture_layout()
         for candidate in self.axes:
-            candidate.set_visible(candidate is axis)
+            candidate.set_visible(candidate in self.groups[axis])
             candidate.set_in_layout(False)
-        axis.set_position(self._maximized_position, which="both")
-        axis.set_in_layout(False)
+        for member in self.groups[axis]:
+            member.set_position(self._maximized_position, which="both")
+            member.set_in_layout(False)
         self.maximized_axes = axis
         self.figure.canvas.draw_idle()
         return True
@@ -757,6 +868,7 @@ class FigureDispatcher:
         figure: Figure,
         controllers: Sequence[DataCursor],
         axes: Sequence[Axes],
+        groups=None,
     ) -> None:
         self.figure = figure
         self.controllers = tuple(controllers)
@@ -770,7 +882,10 @@ class FigureDispatcher:
         self.keyboard_controller: DataCursor | None = None
         self.dragging_controller: DataCursor | None = None
         self.dragging_legend: Legend | None = None
-        self.layout = AxesLayoutManager(figure, axes)
+        self.layout = AxesLayoutManager(figure, axes, groups)
+        self.session = None
+        for controller in self.controllers:
+            controller.panel_axes = self.layout.groups[controller.ax]
         self._pending_axes_click: PendingAxesClick | None = None
         self.connected = True
         canvas = figure.canvas
@@ -809,10 +924,19 @@ class FigureDispatcher:
             (
                 legend
                 for legend in self.legends
-                if legend.get_visible() and legend.contains(event)[0]
+                if legend.get_visible() and legend.axes.get_visible() and legend.contains(event)[0]
             ),
             None,
         )
+
+    def _controller_at(self, event: MouseEvent) -> DataCursor | None:
+        candidates = [c for c in self.controllers
+                      if event.inaxes in c.panel_axes and c.ax.get_visible()]
+        if not candidates:
+            return None
+        if len(candidates) == 1 or event.x is None or event.y is None:
+            return candidates[0]
+        return min(candidates, key=lambda c: c._nearest_point_from_px(event.x, event.y)[2])
 
     def _hide_transient_highlights(
         self, except_controller: DataCursor | None = None
@@ -830,10 +954,12 @@ class FigureDispatcher:
             return
         if self.dragging_legend is not None:
             return
+        if self.session and self.session.series_selection_mode:
+            return
         if self.dragging_controller is not None:
             self.dragging_controller.on_hover(event)
             return
-        controller = self._by_axes.get(event.inaxes)
+        controller = self._controller_at(event)
         if controller is None:
             if self._hide_transient_highlights():
                 self.figure.canvas.draw_idle()
@@ -852,14 +978,20 @@ class FigureDispatcher:
         legend = self._legend_at(event)
         if legend is not None:
             self._pending_axes_click = None
-            if getattr(event, "button", None) == 1:
+            if self.session and self.session.series_selection_mode:
+                self.session._select_from_event(event, legend)
+            elif getattr(event, "button", None) == 1:
                 self.dragging_legend = legend
+            return
+        if self.session and self.session.series_selection_mode:
+            self._pending_axes_click = None
+            self.session._select_from_event(event)
             return
         controller = next(
             (
                 candidate
                 for candidate in self.controllers
-                if candidate.contains_tooltip(event)
+                if candidate.ax.get_visible() and candidate.contains_tooltip(event)
             ),
             None,
         )
@@ -876,7 +1008,7 @@ class FigureDispatcher:
                 self.dragging_controller = controller
             return
         if controller is None:
-            controller = self._by_axes.get(event.inaxes)
+            controller = self._controller_at(event)
         if controller is None:
             self._pending_axes_click = None
             if (event.inaxes in self.layout.axes
@@ -892,7 +1024,7 @@ class FigureDispatcher:
             if (
                 pending is not None
                 and pending.controller is controller
-                and pending.axis is event.inaxes
+                and event.inaxes in pending.controller.panel_axes
             ):
                 for snapshot_controller, snapshot in pending.snapshots:
                     snapshot_controller.restore_state(snapshot)
@@ -944,6 +1076,16 @@ class FigureDispatcher:
         ):
             return
         self._pending_axes_click = None
+        key = (getattr(event, "key", "") or "").lower()
+        if self.session and key == "l":
+            self.session.set_series_selection_mode(not self.session.series_selection_mode)
+            return
+        if self.session and self.session.series_selection_mode:
+            if key in ("escape", "esc"):
+                self.session.set_series_selection_mode(False)
+            elif key in ("delete", "backspace") and self.session.selected_series:
+                self.session.remove_series(self.session.selected_series)
+            return
         if getattr(event, "key", "").lower() in ("escape", "esc"):
             if self.layout.restore():
                 return
@@ -1017,6 +1159,18 @@ class FigureDispatcher:
             self.figure.canvas.draw_idle()
 
 
+@dataclass(eq=False, slots=True)
+class SeriesHandle:
+    """Stable session-owned identity for a rendered curve, including unnamed ones."""
+
+    data: SeriesData
+    axis: Axes
+    primary_axis: Axes
+    artists: tuple
+    removed: bool = False
+
+
+
 @dataclass(slots=True)
 class PlotSession:
     """Own the figure and controller references created for one plot."""
@@ -1025,10 +1179,179 @@ class PlotSession:
     controllers: tuple[DataCursor, ...]
     axes: tuple[Axes, ...]
     _dispatcher: FigureDispatcher
+    right_axes: dict[int, Axes] = field(default_factory=dict)
+    series: tuple[SeriesHandle, ...] = ()
+    _panels: dict = field(default_factory=dict)
+    _theme: str = "default"
+    _legend_series: dict = field(default_factory=dict)
+    _layer: InteractionLayer | None = None
+    _selection_artist: Line2D | None = field(default=None, init=False)
+    series_selection_mode: bool = field(default=False, init=False)
+    selected_series: SeriesHandle | None = field(default=None, init=False)
     _closed: bool = field(default=False, init=False)
 
+    def _refresh_legend(self, primary: Axes) -> None:
+        old = next((legend for legend, records in self._legend_series.items()
+                    if records and records[0].primary_axis is primary), None)
+        location = self._panels[primary].legend_loc
+        if old is not None:
+            # A dragged legend stores its location in axes-relative coordinates.
+            location = old._loc
+            old.set_draggable(False)
+            self._legend_series.pop(old, None)
+            old.remove()
+        records = [r for r in self.series
+                   if r.primary_axis is primary and not r.removed and r.data.label]
+        if records:
+            target = self._dispatcher.layout.groups[primary][-1]
+            legend = _make_legend(target, records, location, self._theme)
+            self._layer.add(legend)
+            self._legend_series[legend] = records
+        self._dispatcher.legends = tuple(self._legend_series)
+
+    def set_series_selection_mode(self, enabled: bool) -> None:
+        """Enter whole-curve selection (also L / native 选线); Esc exits."""
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be bool")
+        if not self._dispatcher.connected:
+            return
+        self.series_selection_mode = enabled
+        self._dispatcher._pending_axes_click = None
+        self._dispatcher._hide_transient_highlights()
+        self._dispatcher.dragging_controller = None
+        self._dispatcher.dragging_legend = None
+        for controller in self.controllers:
+            controller.on_release(None)
+        if enabled:
+            toolbar = getattr(getattr(self.figure.canvas, "manager", None), "toolbar", None)
+            mode = getattr(getattr(toolbar, "mode", None), "name", "")
+            if mode == "PAN":
+                toolbar.pan()
+            elif mode == "ZOOM":
+                toolbar.zoom()
+        else:
+            self._select_series(None)
+        button = getattr(self.figure.canvas, "_series_selector", None)
+        if button is not None:
+            previous = button.blockSignals(True)
+            button.setChecked(enabled)
+            button.blockSignals(previous)
+        self.figure.canvas.draw_idle()
+
+    def _select_series(self, record: SeriesHandle | None) -> None:
+        if self._selection_artist is not None:
+            self._selection_artist.remove()
+            self._selection_artist = None
+        self.selected_series = record
+        if record:
+            data = record.data
+            highlight, = record.axis.plot(
+                data.frames, data.plotting_values, color=data.color,
+                linestyle=data.linestyle, linewidth=data.linewidth,
+                marker=data.marker or "None", markersize=data.markersize,
+                scalex=False, scaley=False, zorder=3.5,
+                path_effects=[patheffects.Stroke(linewidth=data.linewidth + 4,
+                                               foreground="gold"), patheffects.Normal()],
+            )
+            self._layer.add(highlight)
+            self._selection_artist = highlight
+        self.figure.canvas.draw_idle()
+
+    def _select_from_event(self, event: MouseEvent, legend=None) -> None:
+        if event.button != 1:
+            return
+        if legend is not None:
+            for record, text, handle in zip(self._legend_series.get(legend, ()),
+                                            legend.texts, legend.legend_handles):
+                if text.contains(event)[0] or handle.contains(event)[0]:
+                    self._select_series(record)
+                    return
+            return
+        group = self._dispatcher.layout.groups.get(event.inaxes, ())
+        best, best_distance = None, DataCursor._HIT_RADIUS_PIXELS ** 2
+        for record in self.series:
+            if record.removed or record.axis not in group:
+                continue
+            data = record.data
+            xy = record.axis.transData.transform(np.column_stack((data.frames, data.values)))
+            valid = np.isfinite(xy).all(axis=1)
+            point = np.array([event.x, event.y])
+            distances = []
+            if data.marker is not None:
+                distances.extend(np.sum((xy[valid] - point) ** 2, axis=1))
+            if data.linestyle not in ("None", "none", ""):
+                pairs = valid[:-1] & valid[1:]
+                starts, ends = xy[:-1][pairs], xy[1:][pairs]
+                delta = ends - starts
+                length = np.sum(delta * delta, axis=1)
+                ratio = np.divide(np.sum((point - starts) * delta, axis=1), length,
+                                  out=np.zeros_like(length), where=length != 0)
+                nearest = starts + np.clip(ratio, 0, 1)[:, None] * delta
+                distances.extend(np.sum((nearest - point) ** 2, axis=1))
+            distance = min(distances, default=float("inf"))
+            if distance <= best_distance:
+                best, best_distance = record, distance
+        self._select_series(best)
+
+    def remove_series(self, series: SeriesHandle) -> bool:
+        """Delete a curve, its selections and legend entry, then fit remaining data.
+
+        Use a handle from session.series. Repeated removal returns False.
+        Empty axes reset to 0..1; other panels retain their current view.
+        """
+        if not any(series is candidate for candidate in self.series):
+            raise ValueError("series handle does not belong to this PlotSession")
+        if self._closed or not self._dispatcher.connected or series.removed:
+            return False
+        if self.selected_series is series:
+            self._select_series(None)
+        dispatcher = self._dispatcher
+        dispatcher._pending_axes_click = None
+        dispatcher.dragging_legend = None
+        controller = next(c for c in self.controllers if c.ax is series.axis)
+        peers = [r for r in self.series if r.axis is series.axis and not r.removed]
+        controller.remove_series(peers.index(series))
+        dispatcher._sync_keyboard_controller(controller)
+        if dispatcher.dragging_controller is controller and not controller.is_dragging:
+            dispatcher.dragging_controller = None
+        for artist in series.artists:
+            artist.remove()
+        series.removed = True
+        self._refresh_legend(series.primary_axis)
+        group = dispatcher.layout.groups[series.primary_axis]
+        # Recompute from source data: relim() ignores scatter and includes cursors.
+        remaining = [r for r in self.series if r.axis in group and not r.removed]
+        for axis in group:
+            axis.dataLim = Bbox.null()
+            local = [r for r in remaining if r.axis is axis]
+            for record in local:
+                data = record.data
+                axis.update_datalim(np.column_stack((data.frames[data.valid_mask],
+                                                      data.values[data.valid_mask])))
+            axis.set_autoscaley_on(True)
+            if not local:
+                axis.set_ylim(0, 1, auto=True)
+            else:
+                axis.autoscale_view(scalex=False, scaley=True)
+        primary = series.primary_axis
+        primary.set_autoscalex_on(True)
+        if remaining:
+            primary.autoscale_view(scalex=True, scaley=False)
+        else:
+            primary.set_xlim(0, 1, auto=True)
+        toolbar = getattr(getattr(self.figure.canvas, "manager", None), "toolbar", None)
+        if toolbar is not None:
+            toolbar.update()
+            toolbar.push_current()
+        self.figure.canvas.draw_idle()
+        return True
+
     def disconnect(self) -> None:
+        self.set_series_selection_mode(False)
         self._dispatcher.disconnect()
+        button = getattr(self.figure.canvas, "_series_selector", None)
+        if button is not None:
+            button.setEnabled(False)
 
     def close(self) -> None:
         if self._closed:
@@ -1077,94 +1400,149 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
     ))
 
 
+def _make_legend(axis, records, location, theme_name):
+    theme = get_theme(theme_name)
+    handles = []
+    for record in records:
+        item = record.data
+        handles.append(Line2D(
+            [], [], color=item.line_color if item.line_color is not None else item.color,
+            alpha=item.line_alpha, linestyle=item.linestyle, linewidth=item.linewidth,
+            marker=item.marker or "None", markersize=item.markersize,
+            markerfacecolor=item.color, markeredgecolor=item.color,
+        ))
+    legend = OverlayLegend(axis,
+        handles=handles, labels=[r.data.label for r in records],
+        loc=location, prop={"family": font_families(), "size": 8},
+        facecolor="white", edgecolor=theme.border, framealpha=0.95,
+        labelcolor=theme.text, borderpad=0.7, labelspacing=0.45,
+        handlelength=2, handletextpad=0.7,
+    )
+    axis.legend_ = legend
+    legend._remove_method = axis._remove_legend
+    legend.get_frame().set_linewidth(0.6)
+    legend.set_draggable(True)
+    return legend
+
+
+def _apply_enum(axis, mapping):
+    if mapping:
+        labels = dict(mapping)
+        axis.yaxis.set_major_locator(FixedLocator(sorted(labels)))
+        axis.yaxis.set_major_formatter(FuncFormatter(
+            lambda value, position: labels.get(value, f"{value:g}")))
+
+
 def _build_figure(spec: FigureSpec) -> PlotSession:
-    """Render a complete description and install one interaction dispatcher."""
-    # ioff prevents notebook/interactive callers from opening a window during build.
+    """Render a validated description and install one interaction dispatcher."""
+    theme = get_theme(spec.theme)
     with plt.ioff():
         figure = plt.figure(
             figsize=spec.figsize or (6 * spec.cols, max(4, 10 * spec.rows / 3)),
-            facecolor=CANVAS,
+            facecolor=theme.canvas,
         )
-    controllers: list[DataCursor] = []
-    axes: list[Axes] = []
-    legends: list[Legend] = []
+    controllers = []
+    axes = []
+    right_axes = {}
+    groups = {}
+    records = []
+    panel_specs = {}
+    legend_series = {}
     dispatcher = None
+    layer = InteractionLayer(figure)
     try:
         axes_grid = figure.subplots(spec.rows, spec.cols, squeeze=False)
         families = font_families()
         grouped = {panel.panel: panel for panel in spec.panels}
+        if spec.window_title is not None:
+            figure.canvas.manager.set_window_title(spec.window_title)
         if spec.title:
-            figure.suptitle(spec.title, fontsize=14, fontweight="semibold",
-                            color=TEXT, fontfamily=families)
+            title_style = spec.suptitle_style
+            alignment = title_style.horizontalalignment
+            figure.suptitle(spec.title, fontsize=title_style.fontsize,
+                            fontweight=title_style.fontweight,
+                            linespacing=title_style.linespacing,
+                            ha=alignment, x={"left": .025, "center": .5, "right": .975}[alignment],
+                            color=theme.text, fontfamily=families)
         for row in range(spec.rows):
             for column in range(spec.cols):
                 ax = axes_grid[row, column]
                 axes.append(ax)
+                groups[ax] = (ax,)
                 panel = grouped.get((row, column))
                 if panel is None:
                     ax.set_visible(False)
                     continue
-                style_axes(ax, families)
-                handles = []
-                labels = []
+                panel_specs[ax] = panel
+                style_axes(ax, families, theme)
+                right = None
+                if (panel.right_ylabel is not None or panel.right_y_enum is not None
+                        or any(item.yaxis == "right" for item in panel.series)):
+                    right = ax.twinx()
+                    style_axes(right, families, theme)
+                    right.grid(False)
+                    right.spines["left"].set_visible(False)
+                    right.spines["right"].set_visible(True)
+                    right.patch.set_visible(False)
+                    right.set_ylabel(panel.right_ylabel or "")
+                    _apply_enum(right, panel.right_y_enum)
+                    right_axes[row * spec.cols + column + 1] = right
+                    groups[ax] = groups[right] = (ax, right)
                 for item in panel.series:
-                    line_color = (item.line_color if item.line_color is not None
-                                  else item.color)
-                    ax.plot(
+                    target = right if item.yaxis == "right" else ax
+                    line_color = item.line_color if item.line_color is not None else item.color
+                    line, = target.plot(
                         item.frames, item.plotting_values,
                         label=item.label, color=line_color, alpha=item.line_alpha,
                         linestyle=item.linestyle, linewidth=item.linewidth,
                         solid_capstyle="round", zorder=2,
                     )
+                    artists = [line]
                     if item.marker is not None:
-                        ax.scatter(
+                        artists.append(target.scatter(
                             item.frames[item.valid_mask], item.values[item.valid_mask],
                             color=item.color, marker=item.marker,
                             s=item.markersize ** 2,
-                            # Unfilled symbols (+, x, etc.) need a visible stroke.
                             linewidths=0 if MarkerStyle(item.marker).is_filled() else 1,
                             zorder=3, alpha=0.75,
-                        )
-                    if item.label:
-                        handles.append(Line2D(
-                            [], [], color=line_color, alpha=item.line_alpha,
-                            linestyle=item.linestyle, linewidth=item.linewidth,
-                            marker=item.marker or "None", markersize=item.markersize,
-                            markerfacecolor=item.color, markeredgecolor=item.color,
                         ))
-                        labels.append(item.label)
-                if panel.series:
-                    controllers.append(DataCursor(ax, panel.series))
+                    records.append(SeriesHandle(item, target, ax, tuple(artists)))
+                for target in groups[ax]:
+                    items = [r.data for r in records if r.axis is target]
+                    if items:
+                        controllers.append(DataCursor(target, items, layer if right is not None else None))
                 if panel.title:
                     ax.set_title(panel.title, pad=9, fontsize=11,
-                                 fontweight="semibold", color=TEXT,
+                                 fontweight="semibold", color=theme.text,
                                  fontfamily=families)
                     ax.title.set_horizontalalignment("left")
                     ax.title.set_x(0)
                 ax.set_xlabel(panel.xlabel)
                 ax.set_ylabel(panel.ylabel)
-                if handles:
-                    legend = ax.legend(
-                        handles=handles, labels=labels,
-                        loc="upper right", prop={"family": families, "size": 8},
-                        facecolor="white", edgecolor=BORDER, framealpha=0.95,
-                        labelcolor=TEXT, borderpad=0.7, labelspacing=0.45,
-                        handlelength=2, handletextpad=0.7,
-                    )
-                    legends.append(legend)
-                    legend.get_frame().set_linewidth(0.6)
-                    legend.set_draggable(True)
-
+                _apply_enum(ax, panel.y_enum)
+                named = [r for r in records if r.primary_axis is ax and r.data.label]
+                if named:
+                    legend = _make_legend(right if right is not None else ax, named, panel.legend_loc, spec.theme)
+                    # Legends retain gesture and drawing priority over tooltips.
+                    layer.add(legend)
+                    legend_series[legend] = named
         figure.tight_layout(pad=1.4, h_pad=1.7, w_pad=1.7)
         install_toolbar_toggle(figure)
-        dispatcher = FigureDispatcher(figure, controllers, axes)
-        return PlotSession(figure, tuple(controllers), tuple(axes), dispatcher)
+        dispatcher = FigureDispatcher(figure, controllers,
+                                      (*axes, *right_axes.values()), groups)
+        session = PlotSession(figure, tuple(controllers), tuple(axes), dispatcher,
+                              right_axes, tuple(records), panel_specs, spec.theme,
+                              legend_series, layer)
+        dispatcher.legends = tuple(legend_series)
+        dispatcher.session = session
+        install_series_selector(session)
+        return session
     except Exception:
         if dispatcher is not None:
             dispatcher.disconnect()
         for controller in controllers:
             controller.disconnect()
-        for legend in legends:
+        for legend in legend_series:
             legend.set_draggable(False)
         plt.close(figure)
         raise

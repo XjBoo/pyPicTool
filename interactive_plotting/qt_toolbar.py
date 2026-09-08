@@ -69,3 +69,44 @@ def install_toolbar_toggle(figure: Figure) -> None:
     # This explicit reference is the keep-alive guarantee; without it the
     # event filter would be silently dropped on garbage collection.
     canvas._toolbar_toggle = ToolbarToggle()
+
+
+def install_series_selector(session) -> None:
+    """A native whole-line selection mode button; never enters image exports."""
+    canvas = session.figure.canvas
+    anchor = getattr(canvas, "_toolbar_toggle", None)
+    if anchor is None:
+        return
+    from matplotlib.backends.qt_compat import QtCore, QtWidgets
+
+    class SeriesSelector(QtWidgets.QToolButton):
+        def __init__(self):
+            super().__init__(canvas)
+            self.setObjectName("plotSeriesSelector")
+            self.setText("选线")
+            self.setToolTip("选择整条曲线（L），点击曲线后按 Delete/Backspace 删除；Esc 退出")
+            self.setAccessibleName("选择整条曲线")
+            self.setCheckable(True)
+            self.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+            self.setAutoRaise(True)
+            self.setStyleSheet(anchor.styleSheet())
+            self.adjustSize()
+            self.toggled.connect(self.toggle_mode)
+            canvas.installEventFilter(self)
+            self.reposition()
+            self.show()
+
+        def toggle_mode(self, enabled):
+            session.set_series_selection_mode(enabled)
+            canvas.setFocus()
+
+        def reposition(self):
+            self.move(max(0, canvas.width() - anchor.width() - self.width() - 14), 4)
+            self.raise_()
+
+        def eventFilter(self, watched, event):
+            if watched is canvas and event.type() == QtCore.QEvent.Type.Resize:
+                self.reposition()
+            return super().eventFilter(watched, event)
+
+    canvas._series_selector = SeriesSelector()
