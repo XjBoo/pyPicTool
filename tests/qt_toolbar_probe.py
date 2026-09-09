@@ -81,6 +81,34 @@ def main():
     output = io.BytesIO()
     session.figure.savefig(output, format="png")
     assert output.getvalue().startswith(b"\x89PNG")
+    selector = canvas.findChild(QtWidgets.QToolButton, "plotSeriesSelector")
+    assert selector is not None and not selector.isChecked()
+    for navigation in ("pan", "zoom"):
+        getattr(toolbar, navigation)()
+        assert toolbar.mode
+        selector.click()
+        app.processEvents()
+        assert not toolbar.mode and not canvas.widgetlock.locked()
+        assert session.series_selection_mode and canvas.hasFocus()
+        selector.click()
+        assert not session.series_selection_mode
+    selector.click()
+    app.processEvents()
+    assert session.series_selection_mode and selector.isChecked()
+    assert canvas.hasFocus()
+    canvas.callbacks.process("button_press_event", MouseEvent(
+        "button_press_event", canvas, *axis.transData.transform((.5, .5)), button=1))
+    assert session.selected_series is session.series[0]
+    canvas.callbacks.process("key_press_event", KeyEvent(
+        "key_press_event", canvas, key="delete"))
+    assert session.series[0].removed
+    assert axis.get_xlim() == (0, 1) and axis.get_ylim() == (0, 1)
+    canvas.callbacks.process("key_press_event", KeyEvent(
+        "key_press_event", canvas, key="escape"))
+    assert not session.series_selection_mode and not selector.isChecked()
+    assert selector.x() + selector.width() < button.x()
+    session.disconnect()
+    assert not selector.isEnabled()
     session.close()
     session.close()
     app.processEvents()

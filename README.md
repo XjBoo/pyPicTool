@@ -212,3 +212,74 @@ pan/zoom mode so data-point interaction resumes; the current view and selections
 are retained. This native window button does not appear in saved images. Agg
 plots have no window controls. The test suite runs a separate Qt offscreen probe
 for this control; that automated probe does not replace real desktop validation.
+
+## 扩展绘图功能（pyPicTool TODO Ledger）
+
+```python
+from interactive_plotting import figure, build_figure, SuptitleStyle
+
+fig = figure(theme="matlab", window_title="实验数据",
+             title="实验结果\n第二行说明",
+             suptitle_style=SuptitleStyle(fontsize=16, linespacing=1.4))
+ax = fig.subplot(1, xlabel="时间 / s", ylabel="温度 / °C",
+                 right_ylabel="设备状态", right_y_enum={0: "关闭", 1: "运行"},
+                 legend_loc="upper left")
+ax.plot([0, 1, 2], [20, 25, 23], label="温度",
+        tooltip=lambda p: f"{p.series.label}\n时间: {p.x_text}\n温度: {p.y_text} °C")
+ax.plot([0, 1, 2], [0, 1, 1], label="状态", yaxis="right")
+session = fig.build()
+# 也可先获取描述，再在其他调用层构建：
+# spec = fig.to_spec()
+# session = build_figure(spec)
+```
+
+- `yaxis="left" | "right"` 指定曲线所属 Y 轴，共享同一 X 轴。右侧曲线或
+  `right_ylabel` / `right_y_enum` 会创建右轴。`session.axes` 保持原有行优先主轴列表，
+  `session.right_axes[1]` 按 1 起始面板编号访问右轴。双轴合并图例位于右轴上，
+  通过 `session.right_axes[1].get_legend()` 访问。
+- `y_enum={0: "关闭", 1: "运行"}` 设置左轴枚举，`right_y_enum` 设置右轴枚举。
+  键必须是有限数值，值必须是字符串。映射复制保存，空字典清除枚举设置；
+  未列出的值在 tooltip 中仍显示数值。数据数组仍使用数值。
+- `tooltip` 接受 `TooltipContext`，字段为 `series`、`index`、`x`、`y`、
+  `x_text`、`y_text`。`index` 为原始数组的零起始索引，不因 NaN 缺失点而重编号。
+  回调返回字符串，允许换行；点击、钉选与键盘移动时调用，悬停不调用。
+  回调异常或返回非字符串会产生 `RuntimeWarning` 并回退为 Frame/Value。
+- `theme="default"` 保留既有外观；`theme="matlab"` 使用 MATLAB 风格七色循环、
+  浅灰画布和四边边框。显式曲线颜色优先。主题仅作用于当前图。
+- `window_title` 控制原生窗口标题；`title` 控制图内总标题。`SuptitleStyle` 支持
+  `fontsize`、`fontweight`、`linespacing`、`horizontalalignment`（left/center/right）。
+  `legend_loc` 支持 Matplotlib 命名位置，如 upper left、lower right、best。
+
+点击窗口右上角 **选线**，或按 **L**，进入整线选择模式。点击曲线的线段、数据点或
+图例条目，金色描边表示整条曲线已选中；按 **Delete/Backspace** 删除。
+**Esc** 退出整线模式。普通点选择模式中 Delete/Backspace 仍只删除钉选游标。
+工具栏处于 pan/zoom 时数据交互暂停；点击“选线”会退出 pan/zoom。
+缺失值之间的断线区域不会被当作线段选中。
+
+程序化删除使用稳定句柄：`session.remove_series(session.series[0])`。
+`session.series` 按面板行优先、面板内添加顺序保留所有句柄，删除后不重编号；
+`handle.removed` 表示是否已删除，`handle.data` / `handle.axis` 用于查看数据和所属轴。
+同名及未命名曲线都可独立删除。重复删除返回 False，传入其他会话的句柄抛 ValueError，
+关闭或断开后不再删除。删除会清理对应游标与图例、保留其他曲线的选择，并自动适配
+剩余数据范围；无数据的轴恢复 0..1。仅影响所属面板，不改变其他面板视图。
+新增曲线、实时更新数据以及直接修改 Matplotlib 图元仍不属于会话接口。
+
+公开规格也可直接构建：
+
+```python
+from interactive_plotting import FigureSpec, PanelSpec, SeriesData, build_figure
+
+spec = FigureSpec(rows=1, cols=1, panels=(
+    PanelSpec(panel=(0, 0), ylabel="值", series=(
+        SeriesData([0, 1], [10, 20], "A", panel=(0, 0)),
+    )),
+), theme="matlab")
+session = build_figure(spec)
+```
+
+规格中的 `panel=(row, col)` 使用零起始坐标，序列的 panel 必须与所属 PanelSpec 一致。
+`build_figure` 完成参数验证后创建窗口资源，不调用 show；每次调用创建独立会话。
+`fig.to_spec()` 不创建窗口，返回当前描述快照；`fig.build()` 仍保持构建后冻结和幂等行为。
+
+完整示例：`venv/bin/python -m examples.plot_features`。
+无头导出：`MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m examples.plot_features --save /tmp/plot-features.png`。

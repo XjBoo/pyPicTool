@@ -1,10 +1,4 @@
-# cursor-keyboard-navigation Specification
-
-## Purpose
-
-定义选中游标的键盘导航契约：方向键与 Home/End 移动当前选中的游标（不区分锁定状态）、tooltip 对键盘移动的跟随行为、锁定语义与键盘的关系，以及与 matplotlib 默认视图导航键位的隔离。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 键盘移动最近点击选中的点
 
@@ -68,6 +62,7 @@
 #### Scenario: 鼠标位于绘图区时切换选线
 - **WHEN** 鼠标停在绘图区并按 L 进入或退出整线模式
 - **THEN** 仅切换选择模式，Y 轴比例和坐标范围保持原状
+
 
 ### Requirement: 持久选中不阻塞悬停预览
 

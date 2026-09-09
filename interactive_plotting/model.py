@@ -1,6 +1,10 @@
 """Normalized plotting data and internal figure descriptions."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from typing import Literal
 from matplotlib.typing import ColorType
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -26,6 +30,9 @@ class SeriesData:
     linestyle: str = "-"
     linewidth: float = 1.35
     markersize: float = 10 ** 0.5
+
+    yaxis: Literal["left", "right"] = "left"
+    tooltip: Callable[[TooltipContext], str] | None = None
 
     def __post_init__(self) -> None:
         try:
@@ -94,6 +101,26 @@ class SeriesData:
 
 
 @dataclass(frozen=True, slots=True)
+class TooltipContext:
+    """A selected original-array point, including axis-formatted values."""
+
+    series: SeriesData
+    index: int
+    x: float
+    y: float
+    x_text: str
+    y_text: str
+
+
+@dataclass(frozen=True, slots=True)
+class SuptitleStyle:
+    fontsize: float = 14
+    fontweight: str = "semibold"
+    linespacing: float = 1.3
+    horizontalalignment: str = "center"
+
+
+@dataclass(frozen=True, slots=True)
 class PanelSpec:
     """One explicitly present panel, including panels without data."""
 
@@ -102,6 +129,10 @@ class PanelSpec:
     title: str = ""
     xlabel: str = ""
     ylabel: str = ""
+    right_ylabel: str | None = None
+    y_enum: Mapping[float, str] | None = None
+    right_y_enum: Mapping[float, str] | None = None
+    legend_loc: str = "upper right"
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,3 +144,6 @@ class FigureSpec:
     panels: tuple[PanelSpec, ...]
     title: str = ""
     figsize: tuple[float, float] | None = None
+    theme: str = "default"
+    window_title: str | None = None
+    suptitle_style: SuptitleStyle = SuptitleStyle()

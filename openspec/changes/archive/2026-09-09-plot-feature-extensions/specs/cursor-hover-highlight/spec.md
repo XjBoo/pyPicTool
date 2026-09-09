@@ -1,10 +1,4 @@
-# cursor-hover-highlight Specification
-
-## Purpose
-
-定义悬停高亮的触发与表现契约：接近阈值（与左键点击共用）、各数据系列之间的完全独立性、游标标记的瞬态可见性，以及悬停与 tooltip 的关系。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 悬停高亮需要接近阈值
 

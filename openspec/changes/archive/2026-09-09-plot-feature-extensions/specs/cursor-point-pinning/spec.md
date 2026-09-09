@@ -1,10 +1,4 @@
-# cursor-point-pinning Specification
-
-## Purpose
-
-定义数据点的普通选中与多点钉选行为，使用户既能查看单个当前点，也能在同一图中保留多个对比点及其标签。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 普通点击建立唯一活动选中
 
@@ -42,15 +36,6 @@
 
 - **WHEN** 在普通点选择模式下，用户在不同面板中依次执行 Shift+左键点击
 - **THEN** 各面板的钉选点和 tooltip 同时保持可见
-
-### Requirement: 选中标记使用统一圆形视觉
-
-系统 SHALL 对悬停预览、活动选中和钉选点使用圆形标记，并使用尺寸或边缘加粗表示当前焦点。系统 SHALL NOT 使用方形区分持久状态。
-
-#### Scenario: 点击后仍为圆形
-
-- **WHEN** 用户普通点击或 Shift+左键点击一个数据点
-- **THEN** 该点显示为圆形标记，视觉效果与悬停时的加粗点一致
 
 ### Requirement: 钉选点可被单独删除或批量清除
 
