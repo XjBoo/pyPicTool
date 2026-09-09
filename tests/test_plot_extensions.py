@@ -179,6 +179,8 @@ class PlotExtensionsTests(unittest.TestCase):
         self.assertTrue(session.series[0].removed)
         self.assertIsNone(session.selected_series)
         self.assertLess(axis.get_xlim()[1], 2)
+        # Legend rebuilt during a selection-mode deletion stays non-draggable.
+        self.assertFalse(axis.get_legend().get_draggable())
         send_key_event(session, "escape")
         self.assertFalse(session.series_selection_mode)
         self.click(session, axis, 0, 2)
