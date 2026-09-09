@@ -13,7 +13,7 @@ from matplotlib.colors import to_rgba
 
 from interactive_plotting import (figure, build_figure, FigureSpec, PanelSpec,
                                   SeriesData, SuptitleStyle)
-from tests.test_public_api import send_mouse_event, send_key_event
+from tests.test_public_api import send_mouse_event, send_key_event, send_canvas_mouse_event
 
 
 class PlotExtensionsTests(unittest.TestCase):
@@ -185,6 +185,30 @@ class PlotExtensionsTests(unittest.TestCase):
         self.assertIsNotNone(session.controllers[0].active_selection)
         send_key_event(session, "delete")
         self.assertFalse(session.series[1].removed)
+
+    def test_legend_entry_selects_curve_and_drag_is_gated_in_selection_mode(self):
+        fig = figure()
+        ax = fig.subplot(1)
+        ax.plot([0, 1], [0, 1], label="First")
+        ax.plot([0, 1], [1, 0], label="Second")
+        session = self.build(fig)
+        legend = session.axes[0].get_legend()
+        self.assertTrue(legend.get_draggable())
+        send_key_event(session, "l")
+        self.assertTrue(session.series_selection_mode)
+        self.assertFalse(legend.get_draggable())
+        session.figure.canvas.draw()
+        renderer = session.figure.canvas.get_renderer()
+        for index, text in enumerate(legend.texts):
+            bbox = text.get_window_extent(renderer)
+            send_canvas_mouse_event(session, "button_press_event",
+                                    (bbox.x0 + bbox.x1) / 2, (bbox.y0 + bbox.y1) / 2,
+                                    button=1)
+            self.assertIs(session.selected_series, session.series[index],
+                          f"legend entry {text.get_text()!r} should select series {index}")
+        send_key_event(session, "escape")
+        self.assertFalse(session.series_selection_mode)
+        self.assertTrue(legend.get_draggable())
 
     def test_line_shortcut_with_mouse_position_preserves_scale_and_restores_keymap(self):
         original = list(plt.rcParams["keymap.yscale"])

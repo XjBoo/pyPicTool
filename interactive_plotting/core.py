@@ -1204,7 +1204,8 @@ class PlotSession:
                    if r.primary_axis is primary and not r.removed and r.data.label]
         if records:
             target = self._dispatcher.layout.groups[primary][-1]
-            legend = _make_legend(target, records, location, self._theme)
+            legend = _make_legend(target, records, location, self._theme,
+                                  draggable=not self.series_selection_mode)
             self._layer.add(legend)
             self._legend_series[legend] = records
         self._dispatcher.legends = tuple(self._legend_series)
@@ -1216,6 +1217,8 @@ class PlotSession:
         if not self._dispatcher.connected:
             return
         self.series_selection_mode = enabled
+        for legend in self._legend_series:
+            legend.set_draggable(not enabled)
         self._dispatcher._pending_axes_click = None
         self._dispatcher._hide_transient_highlights()
         self._dispatcher.dragging_controller = None
@@ -1400,7 +1403,7 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
     ))
 
 
-def _make_legend(axis, records, location, theme_name):
+def _make_legend(axis, records, location, theme_name, draggable=True):
     theme = get_theme(theme_name)
     handles = []
     for record in records:
@@ -1421,7 +1424,7 @@ def _make_legend(axis, records, location, theme_name):
     axis.legend_ = legend
     legend._remove_method = axis._remove_legend
     legend.get_frame().set_linewidth(0.6)
-    legend.set_draggable(True)
+    legend.set_draggable(draggable)
     return legend
 
 
