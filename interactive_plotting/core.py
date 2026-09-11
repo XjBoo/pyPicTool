@@ -82,16 +82,37 @@ class InteractionLayer(Artist):
         super().__init__()
         self.items = []
         self.drawing = False
+        self._background = None
+        self._background_signature = None
+        self._refreshing = False
+        self._connected = True
         self.set_zorder(10)
         self.set_in_layout(False)
         figure.add_artist(self)
 
-    def add(self, artist):
+    def add(self, artist, *, keep_axes=False):
         owner = artist.axes
         is_legend = isinstance(artist, Legend)
-        artist.remove()
-        artist.axes = owner
-        artist.set_figure(self.figure)
+        original_remove = artist._remove_method
+        if not keep_axes:
+            artist.remove()
+            artist.axes = owner
+            artist.set_figure(self.figure)
+        else:
+            # Keep public Axes.lines/texts membership and picking intact, but
+            # paint only when the figure-level layer reaches its z-order.
+            original_draw = getattr(artist, '_overlay_original_draw', artist.draw)
+            artist._overlay_original_draw = original_draw
+
+            def draw(renderer):
+                if self.drawing:
+                    original_draw(renderer)
+
+            artist.draw = draw
+        # Overlay changes do not invalidate the static scene. The dispatcher
+        # explicitly requests their refresh; static artists still mark it stale.
+        for child in artist.findobj():
+            child.stale_callback = None
         self.items.append(artist)
         if is_legend:
             owner.legend_ = artist
@@ -100,6 +121,8 @@ class InteractionLayer(Artist):
 
         def remove(item):
             self.items.remove(item)
+            if keep_axes and original_remove is not None:
+                original_remove(item)
             if is_legend and owner.get_legend() is item:
                 owner.legend_ = None
 
@@ -108,6 +131,12 @@ class InteractionLayer(Artist):
     def draw(self, renderer):
         if not self.get_visible():
             return
+        if not self._refreshing:
+            self._background = None
+            canvas = self.figure.canvas
+            if self._connected and canvas.supports_blit and not canvas.is_saving():
+                self._background = canvas.copy_from_bbox(self.figure.bbox)
+                self._background_signature = self._signature(renderer)
         self.drawing = True
         try:
             for artist in sorted(self.items, key=lambda item: item.get_zorder()):
@@ -117,11 +146,48 @@ class InteractionLayer(Artist):
             self.drawing = False
         self.stale = False
 
+    def _signature(self, renderer):
+        return (id(renderer), tuple(self.figure.bbox.bounds), self.figure.dpi,
+                self.figure.canvas.device_pixel_ratio)
+
+    def refresh(self):
+        """Paint the latest overlay state, or let a full draw rebuild it."""
+        if not self._connected:
+            return
+        canvas = self.figure.canvas
+        if (not canvas.supports_blit or self._background is None
+                or self.figure.stale or canvas.is_saving()
+                or getattr(canvas, '_draw_pending', False)):
+            canvas.draw_idle()
+            return
+        renderer = canvas.get_renderer()
+        if self._background_signature != self._signature(renderer):
+            self._background = None
+            canvas.draw_idle()
+            return
+        canvas.restore_region(self._background)
+        self._refreshing = True
+        try:
+            self.draw(renderer)
+        finally:
+            self._refreshing = False
+        canvas.blit(self.figure.bbox)
+
+    def disconnect(self):
+        self._connected = False
+        self._background = None
+        self._background_signature = None
+
 
 class DataCursor:
     """Manage independent hover, active, and pinned point selections."""
 
-    _HIT_RADIUS_PIXELS = 6.0
+    _HIT_RADIUS_LOGICAL_PIXELS = 10.0
+
+    def _hit_radius_pixels(self):
+        return self._HIT_RADIUS_LOGICAL_PIXELS * getattr(
+            self.fig.canvas, 'device_pixel_ratio', 1.0
+        )
 
     class Cursor:
         """A persistent active or pinned point and its tooltip."""
@@ -192,9 +258,11 @@ class DataCursor:
         hover_index: int
         hover_active: bool
 
-    def __init__(self, ax: Axes, series_list: Sequence[SeriesData], layer=None) -> None:
+    def __init__(self, ax: Axes, series_list: Sequence[SeriesData], layer=None,
+                 *, keep_axes=True) -> None:
         self.ax = ax
         self.layer = layer
+        self._keep_axes = keep_axes
         self.panel_axes = (ax,)
         self.series_list = tuple(series_list)
         self._disp_xy_list: list[np.ndarray] | None = None
@@ -227,7 +295,7 @@ class DataCursor:
         )
         self.hover_highlight.set_visible(False)
         if self.layer is not None:
-            self.layer.add(self.hover_highlight)
+            self.layer.add(self.hover_highlight, keep_axes=self._keep_axes)
         self._hover_series_idx = 0
         self._hover_index = first_idx
         self._hover_active = False
@@ -413,8 +481,8 @@ class DataCursor:
             role,
         )
         if self.layer is not None:
-            self.layer.add(cursor.highlight)
-            self.layer.add(cursor.tooltip)
+            self.layer.add(cursor.highlight, keep_axes=self._keep_axes)
+            self.layer.add(cursor.tooltip, keep_axes=self._keep_axes)
         self._update_cursor_visuals(cursor, local_idx, show_tooltip=True)
         cursor.highlight.set_visible(True)
         return cursor
@@ -478,7 +546,7 @@ class DataCursor:
         series_idx, local_idx, distance_squared = self._nearest_point_from_px(
             event.x, event.y
         )
-        if distance_squared > self._HIT_RADIUS_PIXELS**2:
+        if distance_squared > self._hit_radius_pixels()**2:
             return self.hide_hover()
 
         old_point = (self._hover_series_idx, self._hover_index)
@@ -536,7 +604,7 @@ class DataCursor:
         series_idx, local_idx, distance_squared = self._nearest_point_from_px(
             event.x, event.y
         )
-        if distance_squared > self._HIT_RADIUS_PIXELS**2:
+        if distance_squared > self._hit_radius_pixels()**2:
             return
 
         is_shift = "shift" in str(getattr(event, "key", "")).lower()
@@ -697,11 +765,11 @@ class DataCursor:
             if cursor.highlight.axes is None:
                 self.ax.add_line(cursor.highlight)
                 if self.layer is not None:
-                    self.layer.add(cursor.highlight)
+                    self.layer.add(cursor.highlight, keep_axes=self._keep_axes)
             if cursor.tooltip.axes is None:
                 self.ax.add_artist(cursor.tooltip)
                 if self.layer is not None:
-                    self.layer.add(cursor.tooltip)
+                    self.layer.add(cursor.tooltip, keep_axes=self._keep_axes)
             cursor.series_idx = state.series_idx
             cursor.color = state.color
             cursor.highlight.set_color(state.color)
@@ -896,6 +964,7 @@ class FigureDispatcher:
             canvas.mpl_connect("key_press_event", self.on_key),
             canvas.mpl_connect("draw_event", self.on_draw),
             canvas.mpl_connect("close_event", self.on_close),
+            canvas.mpl_connect("figure_leave_event", self.on_leave),
         ]
         _suppress_view_navigation_keys()
 
@@ -950,6 +1019,8 @@ class FigureDispatcher:
         return changed
 
     def on_motion(self, event: MouseEvent) -> None:
+        if not self.connected:
+            return
         if self._toolbar_is_active():
             return
         if self.dragging_legend is not None:
@@ -962,14 +1033,25 @@ class FigureDispatcher:
         controller = self._controller_at(event)
         if controller is None:
             if self._hide_transient_highlights():
-                self.figure.canvas.draw_idle()
+                self._refresh_hover()
             return
         self.active_controller = controller
         need_draw = controller.on_hover(event)
         if self._hide_transient_highlights(controller):
             need_draw = True
-        if need_draw:
+        if need_draw or self.figure.stale:
+            self._refresh_hover()
+
+    def _refresh_hover(self):
+        layer = self.controllers[0].layer if self.controllers else None
+        if layer is None:
             self.figure.canvas.draw_idle()
+        else:
+            layer.refresh()
+
+    def on_leave(self, _event):
+        if self.connected and self._hide_transient_highlights():
+            self._refresh_hover()
 
     def on_press(self, event: MouseEvent) -> None:
         if self._toolbar_is_active() or self.dragging_controller is not None:
@@ -1146,6 +1228,8 @@ class FigureDispatcher:
         self._canvas_callback_ids.clear()
         for controller in self.controllers:
             controller.disconnect()
+            if controller.layer is not None:
+                controller.layer.disconnect()
         for legend in self.legends:
             legend.set_draggable(False)
         self.active_controller = None
@@ -1271,7 +1355,8 @@ class PlotSession:
                     return
             return
         group = self._dispatcher.layout.groups.get(event.inaxes, ())
-        best, best_distance = None, DataCursor._HIT_RADIUS_PIXELS ** 2
+        # Whole-curve selection retains its original physical-pixel tolerance.
+        best, best_distance = None, 6.0 ** 2
         for record in self.series:
             if record.removed or record.axis not in group:
                 continue
@@ -1513,7 +1598,7 @@ def _build_figure(spec: FigureSpec) -> PlotSession:
                 for target in groups[ax]:
                     items = [r.data for r in records if r.axis is target]
                     if items:
-                        controllers.append(DataCursor(target, items, layer if right is not None else None))
+                        controllers.append(DataCursor(target, items, layer, keep_axes=right is None))
                 if panel.title:
                     ax.set_title(panel.title, pad=9, fontsize=11,
                                  fontweight="semibold", color=theme.text,
