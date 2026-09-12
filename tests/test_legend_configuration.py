@@ -13,11 +13,15 @@ from interactive_plotting import figure, build_figure
 
 
 class LegendConfigurationTests(unittest.TestCase):
-    def build(self, loc='best_corner', alpha=.3, dual=False):
-        builder = figure(figsize=(6, 4))
+    def build(self, loc='best_corner', alpha=.3, dual=False, cols=1):
+        builder = figure(figsize=(6, 4), cols=cols)
         panel = builder.subplot(1, legend_loc=loc, legend_frame_alpha=alpha,
                                 right_ylabel='Right' if dual else None)
         panel.plot([0, 1], [.5, .5], label='Signal', marker=None)
+        if dual:
+            panel.plot([0, 1], [50, 50], label='Right signal', marker=None, yaxis='right')
+        if cols > 1:
+            builder.subplot(2).plot([0, 1], [0, 1], label='Other panel')
         session = builder.build()
         self.addCleanup(session.close)
         axis = session.axes[0]
@@ -137,7 +141,7 @@ class LegendConfigurationTests(unittest.TestCase):
             matplotlib.transforms.Bbox.from_bounds(.01, .01, 1, 1)] * 4, canvas.get_renderer()) == 0))
 
     def test_view_cache_and_hover_raster(self):
-        session = self.build(dual=True)
+        session = self.build(dual=True, cols=2)
         legend = self.legend(session)
         canvas = session.figure.canvas
         for mutation in (lambda: session.axes[0].set_xlim(-1, 2),
@@ -146,9 +150,12 @@ class LegendConfigurationTests(unittest.TestCase):
                          lambda: session.figure.set_dpi(120),
                          lambda: session.toggle_axes_maximized(session.axes[0]),
                          session.restore_layout):
-            mutation()
-            canvas.draw()
-            self.assertIsNotNone(legend._corner_key)
+            old_key = legend._corner_key
+            with patch.object(legend, '_score_corners', wraps=legend._score_corners) as score:
+                mutation()
+                canvas.draw()
+                self.assertGreater(score.call_count, 0, mutation.__code__.co_firstlineno)
+                self.assertNotEqual(legend._corner_key, old_key)
         with patch.object(legend, '_score_corners', wraps=legend._score_corners) as score:
             for x, y in [(0, .5), (1, .5), (0, 0)]:
                 px, py = session.axes[0].transData.transform((x, y))
@@ -160,6 +167,21 @@ class LegendConfigurationTests(unittest.TestCase):
         session.disconnect()
         self.assertFalse(legend._corner_auto)
         self.assertEqual(legend._data_records, ())
+
+    def test_view_change_relocates_legend(self):
+        builder = figure()
+        panel = builder.subplot(1, legend_loc='best_corner')
+        panel.plot([-.5, 1.5, 2, -.5, .3],
+                   [.95, .95, np.nan, .05, .05], label='A', marker=None)
+        session = builder.build()
+        self.addCleanup(session.close)
+        axis = session.axes[0]
+        axis.set(xlim=(0, 1), ylim=(0, 1))
+        session.figure.canvas.draw()
+        self.assertEqual(self.legend(session)._loc, 4)
+        axis.set_ylim(0, 20)
+        session.figure.canvas.draw()
+        self.assertEqual(self.legend(session)._loc, 1)
 
     def test_click_drag_and_rebuild(self):
         builder = figure()
