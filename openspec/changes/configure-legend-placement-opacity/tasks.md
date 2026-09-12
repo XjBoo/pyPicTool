@@ -15,9 +15,9 @@
 - [x] 3.1 更新 README 和绘图示例，给出四角、best_corner、透明度的代码配置，以及遮挡评分局限、手动拖动和默认兼容说明；执行示例构建并核对与规格一致。
 - [x] 3.2 增加自动图例配合半透明背景的完整绘制/悬停栅格一致性回归，运行 `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v`，记录实际退出码和结果。
 - [x] 3.3 运行 `PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py` 和 `openspec validate --changes`；记录退出码，benchmark 仅证明完整运行无异常，不宣称达到性能阈值。
-- [ ] 3.4 运行 `venv/bin/python interactive_plot.py` 并通过使用新参数的 GUI 示例检查 QtAgg 下缩放/平移、窗口尺寸变化、放大恢复、透明图例拖动、选线删除和无残影；记录实际场景及结果，未执行不得写通过。
+- [x] 3.4 运行 `venv/bin/python interactive_plot.py` 并通过使用新参数的 GUI 示例检查 QtAgg 下缩放/平移、窗口尺寸变化、放大恢复、透明图例拖动、选线删除和无残影；记录实际场景及结果，未执行不得写通过。
 
 ## 4. 实现收尾评审
 
-- [ ] 4.1 固定基线、待审提交和 merge-base，明确未提交修改是否被排除；交由未参与实现的独立 Reviewer 按规格审查，输出含文件行号与触发条件的 Critical/Important/Minor 清单，Review 回合不修改代码。
-- [ ] 4.2 逐项验证审查意见，记录成立/误报/需澄清，修复成立问题后执行相关检查及最终完整适用检查；交付审查报告，逐项说明类型检查、Lint、构建、E2E、安全扫描的覆盖缺口。必需检查失败或未完成、Critical 未解决、Important 未被明确接受时不得宣布实现通过或归档。
+- [x] 4.1 固定基线、待审提交和 merge-base，明确未提交修改是否被排除；交由未参与实现的独立 Reviewer 按规格审查，输出含文件行号与触发条件的 Critical/Important/Minor 清单，Review 回合不修改代码。
+- [x] 4.2 逐项验证审查意见，记录成立/误报/需澄清，修复成立问题后执行相关检查及最终完整适用检查；交付审查报告，逐项说明类型检查、Lint、构建、E2E、安全扫描的覆盖缺口。必需检查失败或未完成、Critical 未解决、Important 未被明确接受时不得宣布实现通过或归档。
