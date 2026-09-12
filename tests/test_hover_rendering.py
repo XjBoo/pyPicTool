@@ -144,6 +144,23 @@ class HoverRenderingTests(unittest.TestCase):
             canvas.draw()
             np.testing.assert_array_equal(raster, np.asarray(canvas.buffer_rgba()))
 
+    def test_foreground_figure_artists_fall_back_without_disappearing(self):
+        for zorder in (10, 20):
+            with self.subTest(zorder=zorder):
+                label = self.session.figure.text(.5, .5, 'Foreground',
+                                                 zorder=zorder, fontsize=30)
+                self.canvas.draw()
+                with patch.object(self.canvas, 'draw', wraps=self.canvas.draw) as draw:
+                    self.motion()
+                    self.motion(0, 0)
+                    self.assertGreater(draw.call_count, 0)
+                self.assert_matches_full_draw()
+                label.remove()
+        self.canvas.draw()
+        with patch.object(self.canvas, 'draw', wraps=self.canvas.draw) as draw:
+            self.motion()
+            draw.assert_not_called()
+
     def test_pending_full_draw_uses_latest_state(self):
         self.session.axes[0].set_xlim(-1, 3)
         with patch.object(self.canvas, 'draw_idle'):

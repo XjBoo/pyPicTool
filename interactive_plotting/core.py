@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.artist import Artist
-from matplotlib.backend_bases import CloseEvent, DrawEvent, KeyEvent, MouseEvent
+from matplotlib.backend_bases import CloseEvent, DrawEvent, KeyEvent, MouseEvent, TimerBase
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
@@ -86,6 +86,8 @@ class InteractionLayer(Artist):
         self._background_signature = None
         self._refreshing = False
         self._connected = True
+        self._draw_timer = None
+        self._draw_requested = False
         self.set_zorder(10)
         self.set_in_layout(False)
         figure.add_artist(self)
@@ -132,9 +134,16 @@ class InteractionLayer(Artist):
         if not self.get_visible():
             return
         if not self._refreshing:
+            self._cancel_draw()
             self._background = None
             canvas = self.figure.canvas
-            if self._connected and canvas.supports_blit and not canvas.is_saving():
+            # Artists painted after this layer cannot be part of its static
+            # background. Keep their full-figure compositing order via fallback.
+            ordered = sorted(self.figure.get_children(), key=lambda a: a.get_zorder())
+            later_artists = ordered[ordered.index(self) + 1:]
+            can_cache = not any(a.get_visible() for a in later_artists)
+            if (self._connected and canvas.supports_blit
+                    and not canvas.is_saving() and can_cache):
                 self._background = canvas.copy_from_bbox(self.figure.bbox)
                 self._background_signature = self._signature(renderer)
         self.drawing = True
@@ -158,12 +167,12 @@ class InteractionLayer(Artist):
         if (not canvas.supports_blit or self._background is None
                 or self.figure.stale or canvas.is_saving()
                 or getattr(canvas, '_draw_pending', False)):
-            canvas.draw_idle()
+            self._request_draw()
             return
         renderer = canvas.get_renderer()
         if self._background_signature != self._signature(renderer):
             self._background = None
-            canvas.draw_idle()
+            self._request_draw()
             return
         canvas.restore_region(self._background)
         self._refreshing = True
@@ -173,7 +182,35 @@ class InteractionLayer(Artist):
             self._refreshing = False
         canvas.blit(self.figure.bbox)
 
+    def _request_draw(self):
+        canvas = self.figure.canvas
+        if self._draw_timer is None:
+            timer = canvas.new_timer(interval=0)
+            # Noninteractive backends have no event loop: draw_idle is immediate.
+            if type(timer) is TimerBase:
+                canvas.draw_idle()
+                return
+            timer.single_shot = True
+            timer.add_callback(self._run_draw)
+            self._draw_timer = timer
+        if not self._draw_requested:
+            self._draw_requested = True
+            self._draw_timer.start()
+
+    def _run_draw(self):
+        if self._connected and self._draw_requested:
+            self._draw_requested = False
+            # This callback is already on the GUI thread. Do not enqueue an
+            # unowned draw_idle callback that could outlive disconnect().
+            self.figure.canvas.draw()
+
+    def _cancel_draw(self):
+        self._draw_requested = False
+        if self._draw_timer is not None:
+            self._draw_timer.stop()
+
     def disconnect(self):
+        self._cancel_draw()
         self._connected = False
         self._background = None
         self._background_signature = None
@@ -1240,7 +1277,7 @@ class FigureDispatcher:
         self._pending_axes_click = None
         self.connected = False
         if layout_changed:
-            self.figure.canvas.draw_idle()
+            self.figure.canvas.draw()
 
 
 @dataclass(eq=False, slots=True)
@@ -1296,6 +1333,9 @@ class PlotSession:
 
     def set_series_selection_mode(self, enabled: bool) -> None:
         """Enter whole-curve selection (also L / native 选线); Esc exits."""
+        self._set_series_selection_mode(enabled, request_draw=True)
+
+    def _set_series_selection_mode(self, enabled: bool, *, request_draw: bool) -> None:
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be bool")
         if not self._dispatcher.connected:
@@ -1317,15 +1357,16 @@ class PlotSession:
             elif mode == "ZOOM":
                 toolbar.zoom()
         else:
-            self._select_series(None)
+            self._select_series(None, request_draw=False)
         button = getattr(self.figure.canvas, "_series_selector", None)
         if button is not None:
             previous = button.blockSignals(True)
             button.setChecked(enabled)
             button.blockSignals(previous)
-        self.figure.canvas.draw_idle()
+        if request_draw:
+            self.figure.canvas.draw_idle()
 
-    def _select_series(self, record: SeriesHandle | None) -> None:
+    def _select_series(self, record: SeriesHandle | None, *, request_draw=True) -> None:
         if self._selection_artist is not None:
             self._selection_artist.remove()
             self._selection_artist = None
@@ -1342,7 +1383,8 @@ class PlotSession:
             )
             self._layer.add(highlight)
             self._selection_artist = highlight
-        self.figure.canvas.draw_idle()
+        if request_draw:
+            self.figure.canvas.draw_idle()
 
     def _select_from_event(self, event: MouseEvent, legend=None) -> None:
         if event.button != 1:
@@ -1435,7 +1477,7 @@ class PlotSession:
         return True
 
     def disconnect(self) -> None:
-        self.set_series_selection_mode(False)
+        self._set_series_selection_mode(False, request_draw=False)
         self._dispatcher.disconnect()
         button = getattr(self.figure.canvas, "_series_selector", None)
         if button is not None:

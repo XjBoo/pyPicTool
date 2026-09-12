@@ -24,5 +24,5 @@
 
 ## 5. 收尾审查
 
-- [ ] 5.1 按仓库契约记录基线、待审提交与 merge-base 范围及未提交遗漏，使用未参与实现的独立 Reviewer 上下文对照本 change 全部规格和实现审查；交付含证据的 Critical/Important/Minor 清单，Review 回合不修改代码。
+- [x] 5.1 按仓库契约记录基线、待审提交与 merge-base 范围及未提交遗漏，使用未参与实现的独立 Reviewer 上下文对照本 change 全部规格和实现审查；交付含证据的 Critical/Important/Minor 清单，Review 回合不修改代码。
 - [ ] 5.2 逐项验证审查意见，成立问题在独立修复回合处理并运行相关及最终完整检查，误报记录理由；交付最终报告，确认无未解决 Critical/未获明确风险接受的 Important，且必需验证完成后才允许收尾或归档。
