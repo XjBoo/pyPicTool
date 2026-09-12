@@ -23,8 +23,8 @@
       "device_pixel_ratio": 1
     },
     "input_pattern": "cross-panel exact / offset-9-logical-pixels / outside / exact / exact",
-    "event_median_seconds": 0.008049666503211483,
-    "event_p95_seconds": 0.008378322632052005,
+    "event_median_seconds": 0.008019728993531317,
+    "event_p95_seconds": 0.00859062910603825,
     "full_draws_per_repeat": [
       0,
       0,
@@ -35,11 +35,11 @@
       59,
       59
     ],
-    "median_seconds": 0.47561349999159575,
+    "median_seconds": 0.4796544580021873,
     "all_seconds": [
-      0.47561349999159575,
-      0.47927691700169817,
-      0.47422712499974295
+      0.4796544580021873,
+      0.48221275000832975,
+      0.47041245800210163
     ],
     "canvas_callback_counts": {
       "motion_notify_event": 8,
@@ -74,8 +74,8 @@
       "device_pixel_ratio": 1
     },
     "input_pattern": "cross-panel exact / offset-9-logical-pixels / outside / exact / exact",
-    "event_median_seconds": 0.008180999488104135,
-    "event_p95_seconds": 0.008922930608969181,
+    "event_median_seconds": 0.007971229497343302,
+    "event_p95_seconds": 0.008301883374224417,
     "full_draws_per_repeat": [
       0,
       0,
@@ -86,11 +86,11 @@
       59,
       59
     ],
-    "median_seconds": 0.47877841599984095,
+    "median_seconds": 0.47255029203370214,
     "all_seconds": [
-      0.47877841599984095,
-      0.4762032500002533,
-      0.5886166669661179
+      0.47255029203370214,
+      0.4725554579636082,
+      0.4670338330324739
     ],
     "canvas_callback_counts": {
       "motion_notify_event": 8,

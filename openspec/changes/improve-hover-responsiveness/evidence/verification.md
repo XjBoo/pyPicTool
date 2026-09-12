@@ -9,7 +9,7 @@ Qt：PySide6 6.11.2。其余环境及物理/逻辑画布尺寸见 baseline-rende
 
 对应 baseline-render.json、baseline-events.json。事件 p95 来自各事件处理时长，批次总时间另列；此处 Agg 不测真实 Qt 显示延迟。
 
-## 当前自动化结果
+## 首次实现自动化结果（修复前）
 
 - `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v`：98 tests，退出码 0（12.396 秒）。包括新增 8 项距离与画面回归，以及原有点击、键盘、钉选、双轴、删除和窗口生命周期测试。
 - `PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py`：退出码 0，结果见 benchmark-smoke.json；只代表无渲染事件处理冒烟。
@@ -21,7 +21,7 @@ Qt：PySide6 6.11.2。其余环境及物理/逻辑画布尺寸见 baseline-rende
 - E2E：覆盖缺口（无独立 E2E 套件；真实 Qt 操作为人工/桌面操作验证）。
 - 安全扫描：覆盖缺口（无已配置扫描命令）。
 
-## 同机包含绘制的对比
+## 首次实现的同机包含绘制对比（修复前，历史记录）
 
 相同 benchmark 输入，60 事件 × 3 次，6 面板。after-render.json 与 baseline-render.json 对比：
 
@@ -43,3 +43,26 @@ Qt：PySide6 6.11.2。其余环境及物理/逻辑画布尺寸见 baseline-rende
 qt-observation.json 为首轮原始采集：2,347 个鼠标移动事件，710 条与后续 paint 关联。该版本 environment 记录的是显示前默认倍率/尺寸，不能用于证明实际屏幕倍率；paint 可能由后续其他 UI 操作触发，因此不将其中的中位数作为纯悬停延迟结论。观察脚本已改为记录每次事件倍率及窗口关闭时的真实尺寸，双轴采集待补。
 
 多屏倍率切换仅有自动化模拟覆盖，当前没有进行真实跨屏验证；作为硬件覆盖缺口报告，不冒充通过。
+
+## 最终代码验证（642a114）
+
+- 单元与交互检查：100 tests，11.307 秒，退出码 0。新增真实 Qt offscreen 排队刷新取消/合并测试以及 Figure 前景内容回归。
+- 默认 hover benchmark：退出码 0，最新结果覆盖写入 benchmark-smoke.json。
+- OpenSpec 结构校验：1 passed，退出码 0；git diff --check 退出码 0。
+- 独立复审：10 项定向测试通过，退出码 0；两个 Important 均关闭，无新增 Critical/Important/确定 Minor。详见 review.md。
+- 类型、Lint/格式、构建、独立 E2E、安全扫描仍为上文列明的覆盖缺口，没有变为通过。
+
+性能对比最终单独运行，避免与测试进程竞争：`PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py --events 60 --repeats 3 --include-render`，退出码 0。
+
+| 每系列点数 | 最终单事件中位数 | 最终 p95 | 每轮完整 draw |
+| --- | --- | --- | --- |
+| 1,000 | 8.020 ms | 8.591 ms | [0, 0, 0] |
+| 10,000 | 7.971 ms | 8.302 ms | [0, 0, 0] |
+
+## 最终 Qt 记录
+
+- qt-dual-final.json：实际倍率 2，物理尺寸 1200×1420、逻辑尺寸 600×710。已观察左轴活动点与右轴悬停共存、跨面板清除旧预览、右轴键盘定位、双轴放大及恢复。
+- qt-dual-post-fix.json：在审查修复后的代码上复查左轴选中、右轴悬停、双轴放大/恢复、跨面板预览、窗口尺寸变化、正常关闭，进程退出码 0；倍率 2，最终物理尺寸 1288×1464、逻辑尺寸 644×732。
+- 原始 Qt 数值是输入到下一次 paint 的代理，可能混入其他 UI 操作；此处不据其计算纯悬停耗时。用户的“明显改善”与独立 Agg 前后对比共同支持体验改善结论。
+- 真实倍率 1 和跨屏切换没有可用验证环境，明确列为硬件覆盖缺口；倍率 1/2 和运行时倍率切换已用自动化测试验证。
+- Shift 钉选在真实窗口中的单独确认待用户回复；自动化已覆盖多钉选、悬停及双轴画面一致性。该确认完成前不勾选任务 4.2/5.2。

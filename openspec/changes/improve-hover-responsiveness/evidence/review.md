@@ -21,4 +21,10 @@ Review 回合未修改代码。稳定清单形成后进入修复回合，没有�
 
 首次 Reviewer 自行执行 98 tests（12.696 秒）、默认 hover benchmark、openspec validate --changes，均退出码 0。类型检查、Lint/格式、构建、独立 E2E、安全扫描均是仓库现有覆盖缺口，不计通过。人工 Qt 由主代理执行，Reviewer 未代称人工验证。
 
-修复后完整检查及最终复审结论待补。
+## 最终复审
+
+固定修复范围：61b2cfa2d4e08d01eb2511905466da7e023ffa5c..642a11430f01cd842731814e66031372e784d343；总范围仍以 76307de57d998f9319ed652ddb05355ce1f11e7d 为 merge-base。
+
+原独立 Reviewer 对修复进行只读复审，确认 I1/I2 均可关闭，未发现新增 Critical、Important 或确定的 Minor。独立执行 `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest tests.test_hover_rendering tests.test_hover_qt_lifecycle -v`，10 项通过，退出码 0。
+
+主代理修复后完整运行 100 tests、默认 benchmark 和 OpenSpec 校验，均通过；Reviewer 未重复全套。证据文档与 Qt 观测数据的最终追加不在该代码审查范围内，不构成新增实现代码。代码审查阻断已解除，最终 GUI 确认见 verification.md。
