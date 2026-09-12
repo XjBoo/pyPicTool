@@ -250,6 +250,26 @@ session = fig.build()
   `fontsize`、`fontweight`、`linespacing`、`horizontalalignment`（left/center/right）。
   `legend_loc` 支持 Matplotlib 命名位置，如 upper left、lower right、best。
 
+图例的位置与背景不透明度可以按子图通过绘图代码配置：
+
+```python
+fig.subplot(1, legend_loc="best_corner", legend_frame_alpha=0.3)
+```
+
+- 四角固定位置为 `upper left`、`lower left`、`upper right`、`lower right`。
+  默认仍为 `upper right`；现有 `best` 保留 Matplotlib 自动选位行为，可能位于中央。
+- `best_corner` 只在四角中比较实际图例矩形遮挡的数据线段和数据点数量，选择评分最低的角，
+  保留内边距。左右轴可见曲线以及未命名曲线都参与判断，tooltip、游标和选择高亮不参与。
+  同分时保留当前自动角；首次按右上、左上、左下、右下决胜。这是遮挡数量的启发式，
+  不保证视觉遮挡面积最小，也不保证完全无覆盖；图例过大时仍锚定于角落，但可能超出绘图区。
+- 缩放、平移、窗口尺寸变化、放大恢复和删除曲线后，自动图例重新评估位置；
+  普通悬停不会重新选位。手动拖动后保留轴相对位置，后续视图变化和删除重建不会抢回位置。
+  新建会话会重新启用配置的自动模式，构建后的 builder 仍然冻结。
+- `legend_frame_alpha` 是背景和边框的**不透明度**：`0` 完全透明、`1` 完全不透明，默认 `0.95`。
+  文字和示例线保持各自原有样式。完全透明的图例仍支持拖动和选线，不改变鼠标命中优先级。
+  参数要求有限实数且范围为 0～1；构建器省略或传入 `None` 保留原值。
+  `PanelSpec` 和 `build_figure` 同样支持这两个配置，规格中的不透明度必须为有效实数。
+
 点击窗口右上角 **选线**，或按 **L**，进入整线选择模式。点击曲线的线段、数据点或
 图例条目，金色描边表示整条曲线已选中；按 **Delete/Backspace** 删除。
 **Esc** 退出整线模式。普通点选择模式中 Delete/Backspace 仍只删除钉选游标。

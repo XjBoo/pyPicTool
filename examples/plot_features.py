@@ -15,14 +15,15 @@ def make_figure():
                  suptitle_style=SuptitleStyle(fontsize=16, linespacing=1.4))
     panel = fig.subplot(1, title="温度与压力", xlabel="时间 / s",
                         ylabel="温度 / °C", right_ylabel="压力 / kPa",
-                        legend_loc="upper left")
+                        legend_loc="best_corner", legend_frame_alpha=0.3)
     panel.plot([0, 1, 2, 3, 4], [20, 24, 23, 27, 25], label="温度", marker="o",
                tooltip=lambda p: f"{p.series.label}\n时间: {p.x_text} s\n温度: {p.y_text} °C")
     panel.plot([0, 1, 2, 3, 4], [100, 130, 110, 140, 120], label="压力",
                yaxis="right", marker="s", linestyle="--")
     panel.plot([0, 1, 2, 3, 4], [40, 45, 48, 50, 44], label="可删除的高温曲线")
     fig.subplot(2, title="设备状态", xlabel="时间 / s", ylabel="状态",
-                y_enum={0: "关闭", 1: "运行", 2: "故障"}, legend_loc="upper left").plot(
+                y_enum={0: "关闭", 1: "运行", 2: "故障"},
+                legend_loc="lower right", legend_frame_alpha=0).plot(
                     [0, 1, 2, 3, 4], [0, 1, 1, 2, 0], label="设备 A")
     return fig
 
