@@ -28,3 +28,5 @@ Review 回合未修改代码。稳定清单形成后进入修复回合，没有�
 原独立 Reviewer 对修复进行只读复审，确认 I1/I2 均可关闭，未发现新增 Critical、Important 或确定的 Minor。独立执行 `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest tests.test_hover_rendering tests.test_hover_qt_lifecycle -v`，10 项通过，退出码 0。
 
 主代理修复后完整运行 100 tests、默认 benchmark 和 OpenSpec 校验，均通过；Reviewer 未重复全套。证据文档与 Qt 观测数据的最终追加不在该代码审查范围内，不构成新增实现代码。代码审查阻断已解除，最终 GUI 确认见 verification.md。
+
+最终人工验收已收到用户“表现正常的”确认，详情见 verification.md；两项审查问题均关闭，必需验收已完成，14/14 项任务完成。未执行归档或合并。

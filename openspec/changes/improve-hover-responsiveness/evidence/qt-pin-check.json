@@ -1,0 +1,1219 @@
+{
+  "environment": {
+    "matplotlib": "3.10.8",
+    "qt_api": "PySide6",
+    "qt_version": "6.11.2",
+    "device_pixel_ratio": 2.0,
+    "physical_size": [
+      1200,
+      1420
+    ],
+    "logical_size": [
+      600,
+      710
+    ]
+  },
+  "mouse_events": 233,
+  "events_with_paint": 14,
+  "paint_proxy_median_ms": 20.29577101347968,
+  "note": "Real input only. Time to next paint may include other UI actions; it is not physical display latency or isolated hover latency.",
+  "samples": [
+    {
+      "received": 341677.270715916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.2418750082142651,
+      "paint_started_ms": 1258.0478750169277,
+      "paint_completed_ms": 1263.9097920036875
+    },
+    {
+      "received": 341730.532705708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7702080183662474
+    },
+    {
+      "received": 341730.548600458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4598749801516533
+    },
+    {
+      "received": 341730.565297625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5511659546755254
+    },
+    {
+      "received": 341730.581976958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6517499568872154
+    },
+    {
+      "received": 341730.598596708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5050000036135316
+    },
+    {
+      "received": 341730.822582916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2888750061392784
+    },
+    {
+      "received": 341730.832471291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4100419939495623
+    },
+    {
+      "received": 341730.849008291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.088749966584146
+    },
+    {
+      "received": 341730.865831791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.343166979495436
+    },
+    {
+      "received": 341730.882286208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9267500136047602
+    },
+    {
+      "received": 341730.898982208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9846250177361071
+    },
+    {
+      "received": 341730.915595125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8930829935707152
+    },
+    {
+      "received": 341730.932288166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8654589764773846
+    },
+    {
+      "received": 341730.948944666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9555419674143195
+    },
+    {
+      "received": 341730.965809583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0752499802038074
+    },
+    {
+      "received": 341730.982330083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9383330470882356
+    },
+    {
+      "received": 341730.999094666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1254590353928506
+    },
+    {
+      "received": 341731.019632166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9899999713525176
+    },
+    {
+      "received": 341731.036142166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7983340183272958
+    },
+    {
+      "received": 341731.052428791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9957500151358545
+    },
+    {
+      "received": 341731.065647791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.028583967126906
+    },
+    {
+      "received": 341731.082188041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.935999967623502
+    },
+    {
+      "received": 341731.099064083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3776670093648136
+    },
+    {
+      "received": 341731.115260625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5309999687597156
+    },
+    {
+      "received": 341731.132988833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4163749874569476
+    },
+    {
+      "received": 341731.1495955,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.449874951504171
+    },
+    {
+      "received": 341731.165956291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7703339797444642
+    },
+    {
+      "received": 341731.182542458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.999749987386167
+    },
+    {
+      "received": 341731.199298291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.222292019519955
+    },
+    {
+      "received": 341731.215741916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.056209031958133
+    },
+    {
+      "received": 341731.232316583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0633750353008509
+    },
+    {
+      "received": 341731.24928775,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1088330065831542
+    },
+    {
+      "received": 341731.265791958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1091670021414757
+    },
+    {
+      "received": 341731.281970041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6003340240567923
+    },
+    {
+      "received": 341731.299462708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3068330008536577
+    },
+    {
+      "received": 341731.315808958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3350829831324518
+    },
+    {
+      "received": 341731.332421791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1883340193890035
+    },
+    {
+      "received": 341731.348937875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9227080154232681
+    },
+    {
+      "received": 341731.365750458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1164169991388917
+    },
+    {
+      "received": 341731.3824895,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1757499887607992
+    },
+    {
+      "received": 341731.3989635,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0337079875171185
+    },
+    {
+      "received": 341731.415645666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2252499582245946
+    },
+    {
+      "received": 341731.43238975,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8314159931614995
+    },
+    {
+      "received": 341731.448992375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0013330029323697
+    },
+    {
+      "received": 341731.465672125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0325409821234643
+    },
+    {
+      "received": 341731.482378208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1690829996950924
+    },
+    {
+      "received": 341731.499001541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0016249725595117
+    },
+    {
+      "received": 341731.5158555,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 12.804457976017147,
+      "paint_completed_ms": 17.064332962036133,
+      "handler_ms": 17.598833015654236
+    },
+    {
+      "received": 341731.53409375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6975000142119825
+    },
+    {
+      "received": 341731.549380666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3629589811898768
+    },
+    {
+      "received": 341731.565347208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.662042002659291
+    },
+    {
+      "received": 341731.612168958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3317919801920652
+    },
+    {
+      "received": 341731.628583458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1481670080684125
+    },
+    {
+      "received": 341731.636225791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8377499761991203
+    },
+    {
+      "received": 341731.649155958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0255000088363886
+    },
+    {
+      "received": 341731.666387333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2377079692669213
+    },
+    {
+      "received": 341731.682372333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4042079565115273
+    },
+    {
+      "received": 341731.699198791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.6052090213634074
+    },
+    {
+      "received": 341731.715622958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1528749600984156
+    },
+    {
+      "received": 341731.73246325,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3907080283388495
+    },
+    {
+      "received": 341731.749077208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.126041985116899
+    },
+    {
+      "received": 341731.765916666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9780839900486171
+    },
+    {
+      "received": 341731.78306425,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.04750000173226
+    },
+    {
+      "received": 341731.799254291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0125419939868152,
+      "full_draw_ms": 42.44049999397248,
+      "paint_started_ms": 905.9804590069689,
+      "paint_completed_ms": 907.2610419825651
+    },
+    {
+      "received": 341733.182807791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.6256250091828406
+    },
+    {
+      "received": 341733.199453875,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 15.53133298875764,
+      "paint_completed_ms": 18.3976250118576,
+      "handler_ms": 18.73499999055639
+    },
+    {
+      "received": 341733.218785291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6136249867267907
+    },
+    {
+      "received": 341733.231923916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.44995895586907864
+    },
+    {
+      "received": 341733.249084833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.119541993830353
+    },
+    {
+      "received": 341733.265656708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9726670105010271
+    },
+    {
+      "received": 341733.282315541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.138709019869566
+    },
+    {
+      "received": 341733.298925125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9812079952098429
+    },
+    {
+      "received": 341733.315610458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9843329899013042
+    },
+    {
+      "received": 341733.332262291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.520500005222857
+    },
+    {
+      "received": 341733.349009,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7072500302456319
+    },
+    {
+      "received": 341733.365572041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7867919630371034
+    },
+    {
+      "received": 341733.382213458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4877499886788428
+    },
+    {
+      "received": 341733.398924875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5424999981187284
+    },
+    {
+      "received": 341733.41559925,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6025410257279873
+    },
+    {
+      "received": 341733.432279375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7254580268636346
+    },
+    {
+      "received": 341733.449007916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5918750539422035
+    },
+    {
+      "received": 341733.465717833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.66708296071738
+    },
+    {
+      "received": 341733.482270791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5840839585289359
+    },
+    {
+      "received": 341733.498894541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8307499811053276
+    },
+    {
+      "received": 341733.515628666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6072920514270663
+    },
+    {
+      "received": 341733.532208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6181249627843499
+    },
+    {
+      "received": 341733.54883575,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.46020798617973924
+    },
+    {
+      "received": 341733.565495958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8510419866070151
+    },
+    {
+      "received": 341733.582279166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6178750190883875
+    },
+    {
+      "received": 341733.599178041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4842090420424938
+    },
+    {
+      "received": 341733.615606625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.47458300832659006
+    },
+    {
+      "received": 341733.632263541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1984999873675406
+    },
+    {
+      "received": 341733.649147,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 14.030457998160273,
+      "paint_completed_ms": 17.01808301731944,
+      "handler_ms": 17.43545802310109
+    },
+    {
+      "received": 341733.667101583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5856670322827995
+    },
+    {
+      "received": 341733.681867583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4639169783331454
+    },
+    {
+      "received": 341733.69856125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.46279100934043527
+    },
+    {
+      "received": 341733.715318875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4902500077150762
+    },
+    {
+      "received": 341733.732508208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1731669656001031
+    },
+    {
+      "received": 341733.816096166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4555000234395266
+    },
+    {
+      "received": 341733.832422083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1355829774402082
+    },
+    {
+      "received": 341733.849305583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.578875002451241
+    },
+    {
+      "received": 341733.865777166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3622920378111303
+    },
+    {
+      "received": 341733.882261708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4524170546792448
+    },
+    {
+      "received": 341733.89908125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2086660135537386
+    },
+    {
+      "received": 341733.915866875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1147080222144723,
+      "full_draw_ms": 35.19262495683506,
+      "paint_started_ms": 423.8605410209857,
+      "paint_completed_ms": 424.92858303012326
+    },
+    {
+      "received": 341734.8099055,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.490541035309434
+    },
+    {
+      "received": 341734.826153291,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 16.67858404107392,
+      "paint_completed_ms": 18.7690420425497,
+      "handler_ms": 19.122667028568685
+    },
+    {
+      "received": 341734.845854333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5987079930491745
+    },
+    {
+      "received": 341734.849439416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4448340041562915
+    },
+    {
+      "received": 341734.865202541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.38104201667010784
+    },
+    {
+      "received": 341734.881850125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.39133301470428705
+    },
+    {
+      "received": 341734.898542416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4370840033516288
+    },
+    {
+      "received": 341734.915701583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0313329985365272
+    },
+    {
+      "received": 341734.932214916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8290000259876251
+    },
+    {
+      "received": 341734.949067166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.044916978571564
+    },
+    {
+      "received": 341734.965672291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0274589876644313
+    },
+    {
+      "received": 341734.982291291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.884583976585418
+    },
+    {
+      "received": 341734.998936041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0400000028312206
+    },
+    {
+      "received": 341735.040561541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.5183340292423964
+    },
+    {
+      "received": 341735.0490455,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3054999872110784
+    },
+    {
+      "received": 341735.065644333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2413329677656293
+    },
+    {
+      "received": 341735.08234575,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0962079977616668
+    },
+    {
+      "received": 341735.099197708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9070420055650175
+    },
+    {
+      "received": 341735.115678875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9814999648369849
+    },
+    {
+      "received": 341735.132410375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.314958033617586
+    },
+    {
+      "received": 341735.1490105,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1953749926760793
+    },
+    {
+      "received": 341735.16576225,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.6818330041132867
+    },
+    {
+      "received": 341735.182498458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0386249632574618
+    },
+    {
+      "received": 341735.199034583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.534292008727789
+    },
+    {
+      "received": 341735.215895791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.24299997696653
+    },
+    {
+      "received": 341735.232600791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3018340105190873
+    },
+    {
+      "received": 341735.249273416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0525420075282454
+    },
+    {
+      "received": 341735.265601916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1552919750101864
+    },
+    {
+      "received": 341735.282273416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0123749962076545
+    },
+    {
+      "received": 341735.298960291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0597920045256615
+    },
+    {
+      "received": 341735.315659416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0059589985758066
+    },
+    {
+      "received": 341735.332256083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1402919772081077
+    },
+    {
+      "received": 341735.348978083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2400830164551735
+    },
+    {
+      "received": 341735.365554375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8439579978585243
+    },
+    {
+      "received": 341735.382223208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.126791990827769
+    },
+    {
+      "received": 341735.399490875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0992499883286655
+    },
+    {
+      "received": 341735.416340458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.371125050354749
+    },
+    {
+      "received": 341735.433080208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4346249517984688
+    },
+    {
+      "received": 341735.449599625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4314159634523094
+    },
+    {
+      "received": 341735.465813625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2216249597258866
+    },
+    {
+      "received": 341735.482333833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0296250111423433
+    },
+    {
+      "received": 341735.4989545,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9467079653404653
+    },
+    {
+      "received": 341735.515877041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9705420234240592
+    },
+    {
+      "received": 341735.532506583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3784999609924853,
+      "full_draw_ms": 40.56412499630824,
+      "paint_started_ms": 719.1092919674702,
+      "paint_completed_ms": 720.3762919525616
+    },
+    {
+      "received": 341738.588235291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2892090016975999
+    },
+    {
+      "received": 341738.599141625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1728330282494426
+    },
+    {
+      "received": 341738.615923375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1562909930944443
+    },
+    {
+      "received": 341738.632153083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8168750209733844
+    },
+    {
+      "received": 341738.649011,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9880830184556544
+    },
+    {
+      "received": 341738.665705166,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0398749727755785
+    },
+    {
+      "received": 341738.682274833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8506670128554106
+    },
+    {
+      "received": 341738.69898275,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9673329768702388
+    },
+    {
+      "received": 341738.715601833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9572500130161643
+    },
+    {
+      "received": 341738.732399666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0607920121401548
+    },
+    {
+      "received": 341738.749182333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.323707983829081
+    },
+    {
+      "received": 341738.7657695,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.19983300101012
+    },
+    {
+      "received": 341738.782307,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0311660007573664
+    },
+    {
+      "received": 341738.798950875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8834159816615283
+    },
+    {
+      "received": 341738.815784666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8453750051558018
+    },
+    {
+      "received": 341738.832531833,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8250829996541142
+    },
+    {
+      "received": 341738.849387125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.950540998019278
+    },
+    {
+      "received": 341738.865754083,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.007292012218386
+    },
+    {
+      "received": 341738.882236208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8172499947249889
+    },
+    {
+      "received": 341738.898860375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7825830252841115
+    },
+    {
+      "received": 341738.915805458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9964170167222619
+    },
+    {
+      "received": 341738.93220675,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7344160112552345
+    },
+    {
+      "received": 341738.949081708,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 17.816250037867576,
+      "paint_completed_ms": 20.518792036455125,
+      "handler_ms": 20.949708006810397
+    },
+    {
+      "received": 341738.970622708,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 10.97745803417638,
+      "paint_completed_ms": 13.309750007465482,
+      "handler_ms": 13.5722920531407
+    },
+    {
+      "received": 341738.9847105,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7587909931316972
+    },
+    {
+      "received": 341738.998525583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4220830160193145
+    },
+    {
+      "received": 341739.015203791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4829590325243771
+    },
+    {
+      "received": 341739.031848125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4368330119177699
+    },
+    {
+      "received": 341739.048512916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5179589497856796
+    },
+    {
+      "received": 341739.295392916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3883339706808329
+    },
+    {
+      "received": 341739.303091708,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.184666994959116
+    },
+    {
+      "received": 341739.315833916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.97124999249354
+    },
+    {
+      "received": 341739.332298458,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.4068330056034029
+    },
+    {
+      "received": 341739.34904725,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3956250040791929
+    },
+    {
+      "received": 341739.36562925,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2748329900205135
+    },
+    {
+      "received": 341739.382298208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.571625005453825
+    },
+    {
+      "received": 341739.398908625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.815958006773144
+    },
+    {
+      "received": 341739.415701791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3663339777849615
+    },
+    {
+      "received": 341739.432719375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3103749952279031
+    },
+    {
+      "received": 341739.449303041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2780840042978525
+    },
+    {
+      "received": 341739.466182541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.6982920351438224
+    },
+    {
+      "received": 341739.482644375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.7284579807892442
+    },
+    {
+      "received": 341739.498932791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.1612920206971467
+    },
+    {
+      "received": 341739.515607375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.240040990523994
+    },
+    {
+      "received": 341739.532003541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2507089995779097
+    },
+    {
+      "received": 341739.549236041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.5018339618109167
+    },
+    {
+      "received": 341739.565955916,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 17.620667000301182,
+      "paint_completed_ms": 20.072749990504235,
+      "handler_ms": 20.47004201449454
+    },
+    {
+      "received": 341739.587020541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7703749579377472
+    },
+    {
+      "received": 341739.598560541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5827919812873006
+    },
+    {
+      "received": 341739.615792541,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.2382499990053475
+    },
+    {
+      "received": 341739.699511291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 2.273834019433707
+    },
+    {
+      "received": 341739.716086291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 2.136041992343962
+    },
+    {
+      "received": 341739.731954625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7072080043144524
+    },
+    {
+      "received": 341739.749383208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 2.158624993171543
+    },
+    {
+      "received": 341739.765852625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.5986249782145023
+    },
+    {
+      "received": 341739.782347,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.6552500310353935
+    },
+    {
+      "received": 341739.804818583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.3784170150756836,
+      "full_draw_ms": 44.046916998922825,
+      "paint_started_ms": 488.50295797456056,
+      "paint_completed_ms": 489.66908297734335
+    },
+    {
+      "received": 341741.786688291,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 18.544542021118104,
+      "paint_completed_ms": 20.872958994004875,
+      "handler_ms": 21.14775002701208
+    },
+    {
+      "received": 341741.808321875,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5687079974450171
+    },
+    {
+      "received": 341741.815241208,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 11.486166971735656,
+      "paint_completed_ms": 12.495332979597151,
+      "handler_ms": 12.74441700661555
+    },
+    {
+      "received": 341741.832016583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4100420046597719
+    },
+    {
+      "received": 341741.848533916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.40233402978628874
+    },
+    {
+      "received": 341741.865169416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4014589940197766
+    },
+    {
+      "received": 341741.881832958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4464579978957772
+    },
+    {
+      "received": 341741.898547625,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5574999959208071
+    },
+    {
+      "received": 341741.915202208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5422080284915864
+    },
+    {
+      "received": 341742.182664666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 2.1595419966615736
+    },
+    {
+      "received": 341742.199407958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 2.1840420085936785
+    },
+    {
+      "received": 341742.215781916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.7944169812835753
+    },
+    {
+      "received": 341742.232474208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.642958028241992
+    },
+    {
+      "received": 341742.24926425,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.7043750267475843
+    },
+    {
+      "received": 341742.265572583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7722079753875732
+    },
+    {
+      "received": 341742.28225375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4903329536318779
+    },
+    {
+      "received": 341742.298915791,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.4866250092163682
+    },
+    {
+      "received": 341742.315606,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6821249844506383
+    },
+    {
+      "received": 341742.332405291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5760000203736126
+    },
+    {
+      "received": 341742.348936041,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5837500211782753
+    },
+    {
+      "received": 341742.365538583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.45437499647960067
+    },
+    {
+      "received": 341742.382208,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6563329952768981
+    },
+    {
+      "received": 341742.399042583,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5032499902881682
+    },
+    {
+      "received": 341742.415586666,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6025420152582228
+    },
+    {
+      "received": 341742.432314958,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9117499575950205
+    },
+    {
+      "received": 341742.448944291,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 1.0097090271301568
+    }
+  ]
+}

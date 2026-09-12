@@ -19,10 +19,10 @@
 ## 4. 真实体验与整体验证
 
 - [x] 4.1 在相同环境重跑第 1 节 benchmark，交付前后耗时和绘制次数对比；包含渲染结果需显示改善，若无改善或退化则定位原因，不能仅凭无渲染冒烟宣布性能达标。
-- [ ] 4.2 运行 `venv/bin/python interactive_plot.py`，按 design.md 的 Qt 场景清单验证慢速靠近、快速移动、交叉曲线、面板/双轴、持久标记、图例、视图/内容变化、保存和窗口生命周期；记录实际操作、结果、倍率与可取得的事件/绘制/paint 时序，清楚标注测量边界及不可用屏幕场景。
+- [x] 4.2 运行 `venv/bin/python interactive_plot.py`，按 design.md 的 Qt 场景清单验证慢速靠近、快速移动、交叉曲线、面板/双轴、持久标记、图例、视图/内容变化、保存和窗口生命周期；记录实际操作、结果、倍率与可取得的事件/绘制/paint 时序，清楚标注测量边界及不可用屏幕场景。
 - [x] 4.3 在最终实现上运行 `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v`、`PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py` 和 `openspec validate --changes`，记录退出码；逐项报告类型检查、Lint/格式、构建、E2E、安全扫描的现有覆盖缺口，不将缺口计为通过。
 
 ## 5. 收尾审查
 
 - [x] 5.1 按仓库契约记录基线、待审提交与 merge-base 范围及未提交遗漏，使用未参与实现的独立 Reviewer 上下文对照本 change 全部规格和实现审查；交付含证据的 Critical/Important/Minor 清单，Review 回合不修改代码。
-- [ ] 5.2 逐项验证审查意见，成立问题在独立修复回合处理并运行相关及最终完整检查，误报记录理由；交付最终报告，确认无未解决 Critical/未获明确风险接受的 Important，且必需验证完成后才允许收尾或归档。
+- [x] 5.2 逐项验证审查意见，成立问题在独立修复回合处理并运行相关及最终完整检查，误报记录理由；交付最终报告，确认无未解决 Critical/未获明确风险接受的 Important，且必需验证完成后才允许收尾或归档。
