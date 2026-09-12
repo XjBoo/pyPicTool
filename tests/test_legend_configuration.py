@@ -41,7 +41,8 @@ class LegendConfigurationTests(unittest.TestCase):
     def test_validation_snapshot_and_frozen_builder(self):
         builder = figure(cols=2)
         builder.subplot(1, legend_frame_alpha=.2).plot([0, 1], [0, 1], label='A')
-        builder.subplot(2, legend_loc='best_corner', legend_frame_alpha=0)
+        builder.subplot(2, legend_loc='best_corner', legend_frame_alpha=0).plot(
+            [0, 1], [1, 0], label='B')
         builder.subplot(1, legend_frame_alpha=None)
         before = builder.to_spec()
         for value in (True, '0.5', np.nan, np.inf, -1, 1.1):
@@ -59,7 +60,7 @@ class LegendConfigurationTests(unittest.TestCase):
         session = build_figure(before)
         self.addCleanup(session.close)
         self.assertEqual(session.axes[0].get_legend().get_frame().get_alpha(), .2)
-        self.assertEqual(before.panels[1].legend_frame_alpha, 0)
+        self.assertEqual(session.axes[1].get_legend().get_frame().get_alpha(), 0)
         session2 = builder.build()
         self.addCleanup(session2.close)
         with self.assertRaises(RuntimeError):
@@ -216,6 +217,30 @@ class LegendConfigurationTests(unittest.TestCase):
         session.remove_series(session.series[0])
         self.assertEqual(self.legend(session)._loc, manual)
         self.assertEqual(self.legend(session).get_frame().get_alpha(), 0)
+
+    def test_auto_legend_rescores_after_series_deletion(self):
+        builder = figure()
+        panel = builder.subplot(1, legend_loc='best_corner')
+        panel.plot([.94, .94, .94, .06, .06, .06, .06, .06, .06],
+                   [.94, .94, .94, .94, .94, .94, .06, .06, .06],
+                   label='Crowded corners',
+                   linestyle='None', markersize=10)
+        panel.plot([0, 1], [1, 0], label='Remaining', linestyle='None', markersize=10)
+        session = builder.build()
+        self.addCleanup(session.close)
+        axis = session.axes[0]
+        axis.set(xlim=(0, 1), ylim=(0, 1))
+        session.figure.canvas.draw()
+        old_legend = self.legend(session)
+        old_corner = old_legend._loc
+
+        session.remove_series(session.series[0])
+        new_legend = self.legend(session)
+        self.assertIsNot(new_legend, old_legend)
+        self.assertTrue(new_legend._corner_auto)
+        self.assertIsNotNone(new_legend._corner_key)
+        self.assertNotEqual(new_legend._loc, old_corner)
+        self.assertEqual(new_legend._loc, 1)
 
     def test_all_occupied_scores_and_oversized_legend(self):
         session = self.build()

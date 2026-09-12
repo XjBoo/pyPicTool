@@ -84,6 +84,8 @@ class OverlayLegend(Legend):
                   self._fontsize]
         for record in self._data_records:
             result.append(record.removed)
+            if record.removed:
+                continue
             for artist in record.artists:
                 result.extend((artist.get_visible(), artist.axes.get_visible(),
                                artist.get_alpha(), tuple(artist.axes.bbox.bounds),

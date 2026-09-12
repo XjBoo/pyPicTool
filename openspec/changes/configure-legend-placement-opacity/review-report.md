@@ -63,3 +63,37 @@ GUI 中初次使用 AX 复选框点击只改变按钮状态，未实际执行导
 ## 最终结论
 
 独立 Reviewer 已复审 `72912fa..b4df9f7`，确认原 Minor 已解决、未发现新增问题：Critical 0、Important 0、Minor 0。最终适用自动化检查及 QtAgg 人工验收完成，12/12 任务完成，满足收尾条件。规格尚未同步到主规格，change 尚未归档。
+
+## Finish run：codex/finish-legend-placement-opacity
+
+- 本轮基线及 merge-base：`8ce047c600c7955bb156bc51be3798793b39562b`。
+- 首个固定候选：`137314a55ddcd23770c159507186840e769f9dc6`。
+- 分支：`codex/finish-legend-placement-opacity`。
+- 首轮工作区及索引干净，无排除的实现修改。正式独立审查覆盖 `8ce047c...137314a`，进入 finding 处置循环 1。
+
+### Finding 处置
+
+| ID | 级别 | 摘要 | 验证 | 处置 |
+|---|---|---|---|---|
+| F1 | Minor | 第二面板没有实际图例，多面板透明度隔离缺少渲染断言 | Confirmed：规格场景要求两面板经公开构建各自保留透明度，原测试只断言快照值 | Fixed：第二面板增加命名曲线，并断言两个实际 Legend frame 的 alpha |
+| F2 | Minor | 自动模式删除后重新评分缺少回归测试 | Confirmed：原删除测试只覆盖固定或手动位置 | Fixed：新增确定性自动角场景，断言重建、自动状态、评分完成及右下到右上的换角 |
+| V1 | Important | 自动模式删除曲线后缓存键访问已移除 artist 的空 axes 并崩溃 | Confirmed：公开 `remove_series` 回归先稳定触发 `AttributeError` | Fixed：缓存键遇到 removed record 时记录删除状态后跳过其 artist；原失败测试转为通过 |
+
+F1、F2 均按用户授权自动采用推荐方案；不改变 OpenSpec 行为，不需修改 proposal、design、spec 或 tasks。V1 是修复 F2 测试时发现的规范阻断，实现修复保持既有设计：删除记录不参与候选几何和评分。
+
+### 修复后验证
+
+| 检查 | 结果 | 证据或缺口 |
+|---|---|---|
+| 单元与 Agg 交互测试 | Pass | `MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python -m unittest discover -s tests -v`，111 项通过，11.676 秒 |
+| Hover benchmark | Pass | `PYTHONPATH=. MPLBACKEND=Agg MPLCONFIGDIR=.mplconfig venv/bin/python benchmarks/benchmark_hover.py` 完整运行；无机器无关性能阈值 |
+| OpenSpec 结构 | Pass | `openspec validate --changes`，1 passed、0 failed |
+| OpenSpec 实现核验 | Pass | 12/12 tasks、3 requirements、12 scenarios 均映射到实现与测试，未发现规格或设计分歧 |
+| QtAgg 人工检查 | Pass | 本轮执行 `MPLCONFIGDIR=.mplconfig venv/bin/python interactive_plot.py`；验证子图放大/恢复、图例拖动、L 选线、关闭清理，进程退出 0 |
+| 类型检查 | Gap | mypy 未安装，仓库无已采用命令 |
+| Lint/格式 | Gap | Ruff 未安装，仓库无已采用命令；`git diff --check` 通过但不替代 Lint |
+| 构建 | Gap | 无 build-system 或已采用构建命令 |
+| 独立 E2E | Gap | 无独立套件；现有自动交互为 Agg，并补充 QtAgg 人工检查 |
+| 安全扫描 | Gap | 未配置 secret scan、SAST 或依赖漏洞扫描 |
+
+本轮尚待创建修复检查点及对完整新范围的全新独立复审。change 未同步、未归档。
