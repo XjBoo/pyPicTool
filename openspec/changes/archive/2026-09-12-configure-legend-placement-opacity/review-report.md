@@ -147,4 +147,4 @@ F1、F2 均按用户授权自动采用推荐方案；不改变 OpenSpec 行为�
 
 ### Archive gate
 
-Ready。change 尚未同步到主规格，也尚未归档。
+Completed。主规格已同步，change 已归档至 `openspec/changes/archive/2026-09-12-configure-legend-placement-opacity/`。
