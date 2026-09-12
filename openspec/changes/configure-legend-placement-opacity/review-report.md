@@ -96,4 +96,55 @@ F1、F2 均按用户授权自动采用推荐方案；不改变 OpenSpec 行为�
 | 独立 E2E | Gap | 无独立套件；现有自动交互为 Agg，并补充 QtAgg 人工检查 |
 | 安全扫描 | Gap | 未配置 secret scan、SAST 或依赖漏洞扫描 |
 
-本轮尚待创建修复检查点及对完整新范围的全新独立复审。change 未同步、未归档。
+### 第二轮独立复审
+
+- 修复检查点：`2df83678ff6e19b85f816fa73b03c6833997de99`。
+- Review batch：`legend-rereview-2df8367`，完整审查 `8ce047c...2df8367`。
+- Reviewer 在 `/private/tmp` 隔离副本撤掉 removed-record 跳过逻辑，F2 测试稳定以 `AttributeError` 失败；当前检查点同一测试通过，确认 V1 回归测试具备 mutation sensitivity。
+- Reviewer 独立复跑 111 项测试、hover benchmark、OpenSpec 校验和 `git diff --check`，退出码均为 0。
+- 最终批次：Critical 0、Important 0、Minor 0；F1、F2、V1 均为 `Fixed`，没有 Deferred、Accepted risk 或 Unresolved blocker。
+
+## OpenSpec Review Report: configure-legend-placement-opacity
+
+- Base / merge-base：`8ce047c600c7955bb156bc51be3798793b39562b`
+- 最终实现检查点：`2df83678ff6e19b85f816fa73b03c6833997de99`
+- Review loops：2
+- Outcome：Findings dispositioned；最新独立批次 No findings
+
+### Validation
+
+| Check | Result | Evidence or gap |
+|---|---|---|
+| 单元与交互逻辑 | Pass | 111 tests；主流程 11.676 秒、独立 Reviewer 11.717 秒 |
+| Hover 冒烟 | Pass | 两次完整运行无异常；无性能阈值结论 |
+| OpenSpec 结构 | Pass | 1 passed、0 failed |
+| OpenSpec 实现核验 | Pass | 12/12 tasks、3/3 requirements、12/12 scenarios |
+| QtAgg 手工 | Pass | 放大/恢复、图例拖动、L 选线、关闭，进程退出 0 |
+| 类型检查 | Gap | mypy 未安装，无采用命令 |
+| Lint/格式 | Gap | Ruff 未安装，无采用命令 |
+| 构建 | Gap | 无 build-system 或采用命令 |
+| 独立 E2E | Gap | 无独立套件；Agg 自动交互 + QtAgg 手工 |
+| 安全扫描 | Gap | 未配置扫描命令 |
+
+### Findings and disposition
+
+| ID | Severity | Summary | Validation | Disposition |
+|---|---|---|---|---|
+| F1 | Minor | 多面板透明度缺少实际图例断言 | Confirmed | Fixed |
+| F2 | Minor | 自动图例删除重评分缺少回归 | Confirmed | Fixed |
+| V1 | Important | 自动图例删除后访问空 axes 崩溃 | Confirmed，mutation probe | Fixed |
+
+### Changes made
+
+- Code：自动定位缓存跳过已删除记录的 artist，同时把删除状态保留在缓存键中。
+- Tests：增加双面板实际图例透明度断言；增加自动图例删除后重建、重评分和换角回归。
+- OpenSpec artifacts：规范行为未改变；更新本审查记录。
+
+### Remaining risk
+
+- 保留上述类型检查、Lint、构建、独立 E2E 和安全扫描覆盖缺口。
+- best_corner 使用四角遮挡数量启发式，不保证视觉遮挡面积全局最优；超大图例不保证完全容纳。这是已记录的产品边界，不是未解决 finding。
+
+### Archive gate
+
+Ready。change 尚未同步到主规格，也尚未归档。
