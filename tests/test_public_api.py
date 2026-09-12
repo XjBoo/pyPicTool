@@ -802,7 +802,7 @@ class InteractivePlotTests(unittest.TestCase):
         from interactive_plotting import create_interactive_plot
 
         for interaction in ("hover", "click"):
-            for offset, should_hit in ((5.9, True), (6.0, True), (6.1, False)):
+            for offset, should_hit in ((9.9, True), (10.0, True), (10.1, False)):
                 with self.subTest(
                     interaction=interaction, offset=offset, should_hit=should_hit
                 ):

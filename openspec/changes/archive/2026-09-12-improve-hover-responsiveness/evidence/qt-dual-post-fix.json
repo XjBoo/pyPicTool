@@ -1,0 +1,67 @@
+{
+  "environment": {
+    "matplotlib": "3.10.8",
+    "qt_api": "PySide6",
+    "qt_version": "6.11.2",
+    "device_pixel_ratio": 2.0,
+    "physical_size": [
+      1288,
+      1464
+    ],
+    "logical_size": [
+      644,
+      732
+    ]
+  },
+  "mouse_events": 6,
+  "events_with_paint": 5,
+  "paint_proxy_median_ms": 23.646540998015553,
+  "note": "Real input only. Time to next paint may include other UI actions; it is not physical display latency or isolated hover latency.",
+  "samples": [
+    {
+      "received": 340974.900677333,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 5.843083024956286,
+      "paint_completed_ms": 8.060874999500811,
+      "handler_ms": 8.478791976813227,
+      "full_draw_ms": 25.844042014796287
+    },
+    {
+      "received": 340975.240122916,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.6672089803032577,
+      "full_draw_ms": 23.81558303022757,
+      "paint_started_ms": 30.389334016945213,
+      "paint_completed_ms": 31.97320899926126
+    },
+    {
+      "received": 340975.27328975,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.37525000516325235,
+      "full_draw_ms": 21.728624997194856,
+      "paint_started_ms": 22.469750023446977,
+      "paint_completed_ms": 23.646540998015553
+    },
+    {
+      "received": 340975.724461375,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.7055409951135516,
+      "full_draw_ms": 20.6679169787094,
+      "paint_started_ms": 86.22041600756347,
+      "paint_completed_ms": 87.4311660300009
+    },
+    {
+      "received": 340976.823504333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.9892500238493085
+    },
+    {
+      "received": 340976.832942166,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 6.725083978381008,
+      "paint_completed_ms": 8.490874955896288,
+      "handler_ms": 8.880874956957996,
+      "full_draw_ms": 25.787999969907105
+    }
+  ]
+}

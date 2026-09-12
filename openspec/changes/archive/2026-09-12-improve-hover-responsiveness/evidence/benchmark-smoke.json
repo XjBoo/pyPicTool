@@ -1,0 +1,116 @@
+[
+  {
+    "points_per_series": 1000,
+    "panels": 6,
+    "series": 12,
+    "events": 200,
+    "repeats": 5,
+    "pinned_per_measured_panel": 1,
+    "render_included": false,
+    "environment": {
+      "python": "3.13.15",
+      "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+      "matplotlib": "3.10.8",
+      "backend": "Agg",
+      "physical_size": [
+        1200,
+        1000
+      ],
+      "logical_size": [
+        1200,
+        1000
+      ],
+      "device_pixel_ratio": 1
+    },
+    "input_pattern": "cross-panel exact / offset-9-logical-pixels / outside / exact / exact",
+    "event_median_seconds": 0.0001770000089891255,
+    "event_p95_seconds": 0.00024113922845572227,
+    "full_draws_per_repeat": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "blits_per_repeat": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "median_seconds": 0.030884957988746464,
+    "all_seconds": [
+      0.030092208995483816,
+      0.032532625016756356,
+      0.03149737499188632,
+      0.030884957988746464,
+      0.03080345899797976
+    ],
+    "canvas_callback_counts": {
+      "motion_notify_event": 8,
+      "button_press_event": 5,
+      "button_release_event": 8,
+      "key_press_event": 3,
+      "draw_event": 1,
+      "close_event": 1
+    }
+  },
+  {
+    "points_per_series": 10000,
+    "panels": 6,
+    "series": 12,
+    "events": 200,
+    "repeats": 5,
+    "pinned_per_measured_panel": 1,
+    "render_included": false,
+    "environment": {
+      "python": "3.13.15",
+      "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+      "matplotlib": "3.10.8",
+      "backend": "Agg",
+      "physical_size": [
+        1200,
+        1000
+      ],
+      "logical_size": [
+        1200,
+        1000
+      ],
+      "device_pixel_ratio": 1
+    },
+    "input_pattern": "cross-panel exact / offset-9-logical-pixels / outside / exact / exact",
+    "event_median_seconds": 0.00020870802109129727,
+    "event_p95_seconds": 0.00030222260393202304,
+    "full_draws_per_repeat": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "blits_per_repeat": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "median_seconds": 0.036590666975826025,
+    "all_seconds": [
+      0.03645200002938509,
+      0.036279666994232684,
+      0.036591833049897105,
+      0.03773795801680535,
+      0.036590666975826025
+    ],
+    "canvas_callback_counts": {
+      "motion_notify_event": 8,
+      "button_press_event": 5,
+      "button_release_event": 8,
+      "key_press_event": 3,
+      "draw_event": 1,
+      "close_event": 1
+    }
+  }
+]

@@ -1,0 +1,84 @@
+{
+  "environment": {
+    "matplotlib": "3.10.8",
+    "qt_api": "PySide6",
+    "qt_version": "6.11.2",
+    "device_pixel_ratio": 2.0,
+    "physical_size": [
+      1200,
+      1420
+    ],
+    "logical_size": [
+      600,
+      710
+    ]
+  },
+  "mouse_events": 9,
+  "events_with_paint": 7,
+  "paint_proxy_median_ms": 7.772875018417835,
+  "note": "Real input only. Time to next paint may include other UI actions; it is not physical display latency or isolated hover latency.",
+  "samples": [
+    {
+      "received": 340645.442505875,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 6.873707985505462,
+      "paint_completed_ms": 9.361290954984725,
+      "handler_ms": 9.826207999140024,
+      "full_draw_ms": 25.047166971489787
+    },
+    {
+      "received": 340645.788990125,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.731165986508131
+    },
+    {
+      "received": 340645.799781791,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 4.64145903242752,
+      "paint_completed_ms": 6.1550840036943555,
+      "handler_ms": 6.432041991502047
+    },
+    {
+      "received": 340650.722748875,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 6.023791036568582,
+      "paint_completed_ms": 7.772875018417835,
+      "handler_ms": 8.08245805092156
+    },
+    {
+      "received": 340650.736832375,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 5.364749988075346,
+      "paint_completed_ms": 7.265333028044552,
+      "handler_ms": 7.5714580016210675
+    },
+    {
+      "received": 340655.305938208,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 4.823333001695573,
+      "paint_completed_ms": 6.443957972805947,
+      "handler_ms": 6.696291966363788,
+      "full_draw_ms": 22.156415972858667
+    },
+    {
+      "received": 340655.754648416,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.5922919954173267,
+      "full_draw_ms": 28.14000000944361,
+      "paint_started_ms": 205.5667499662377,
+      "paint_completed_ms": 206.85008401051164
+    },
+    {
+      "received": 340666.357054333,
+      "device_pixel_ratio": 2.0,
+      "handler_ms": 0.8313749567605555
+    },
+    {
+      "received": 340666.366470541,
+      "device_pixel_ratio": 2.0,
+      "paint_started_ms": 5.826709035318345,
+      "paint_completed_ms": 8.318667009007186,
+      "handler_ms": 8.732167014386505
+    }
+  ]
+}
