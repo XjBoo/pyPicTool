@@ -120,11 +120,14 @@ class FigureBuilder:
         y_enum: Mapping[float, str] | None = None,
         right_y_enum: Mapping[float, str] | None = None,
         legend_loc: str | None = None,
+        legend_frame_alpha: float | None = None,
     ) -> Subplot:
-        """Get/create a 1-based, row-major subplot and update supplied text.
+        """Get/create a 1-based, row-major subplot and update supplied options.
 
         Omitted/None text stays unchanged; an empty string clears it.
         Explicitly created empty panels remain visible after build().
+        legend_loc='best_corner' avoids data using only the four corners.
+        legend_frame_alpha (0..1, default .95) affects the frame, not labels.
         """
         index = _positive_integer(index, "index")
         if index > self._spec.rows * self._spec.cols:
@@ -133,11 +136,14 @@ class FigureBuilder:
                    (("title", title), ("xlabel", xlabel), ("ylabel", ylabel),
                     ("right_ylabel", right_ylabel), ("legend_loc", legend_loc))
                    if value is not None}
-        if updates or y_enum is not None or right_y_enum is not None or index not in self._panels:
+        if (updates or legend_frame_alpha is not None or y_enum is not None
+                or right_y_enum is not None or index not in self._panels):
             self._require_mutable()
         updates = {name: _text(value, name) for name, value in updates.items()}
         if legend_loc is not None:
             _legend_location(legend_loc)
+        if legend_frame_alpha is not None:
+            updates["legend_frame_alpha"] = _legend_alpha(legend_frame_alpha)
         for name, values in (("y_enum", y_enum), ("right_y_enum", right_y_enum)):
             if values is not None:
                 updates[name] = _enum_values(values, name)
@@ -210,8 +216,15 @@ def figure(
 
 def _legend_location(value: str) -> None:
     from matplotlib.legend import Legend
-    if not isinstance(value, str) or value not in Legend.codes:
+    if not isinstance(value, str) or (value != "best_corner" and value not in Legend.codes):
         raise ValueError("legend_loc must be a named Matplotlib legend location")
+
+
+def _legend_alpha(value):
+    if (isinstance(value, bool) or not isinstance(value, Real)
+            or not isfinite(value) or not 0 <= value <= 1):
+        raise ValueError("legend_frame_alpha must be a finite number between 0 and 1")
+    return float(value)
 
 
 def _enum_values(values: Mapping[float, str], name: str):
@@ -255,10 +268,12 @@ def build_figure(spec: FigureSpec) -> PlotSession:
         for name in ("title", "xlabel", "ylabel"):
             _text(getattr(panel, name), name)
         _legend_location(panel.legend_loc)
+        _legend_alpha(panel.legend_frame_alpha)
         subplot = builder.subplot(pos[0] * spec.cols + pos[1] + 1,
             title=panel.title, xlabel=panel.xlabel, ylabel=panel.ylabel,
             right_ylabel=panel.right_ylabel, y_enum=panel.y_enum,
-            right_y_enum=panel.right_y_enum, legend_loc=panel.legend_loc)
+            right_y_enum=panel.right_y_enum, legend_loc=panel.legend_loc,
+            legend_frame_alpha=panel.legend_frame_alpha)
         try:
             items = tuple(panel.series)
         except TypeError as error:

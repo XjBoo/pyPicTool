@@ -133,6 +133,7 @@ class PanelSpec:
     y_enum: Mapping[float, str] | None = None
     right_y_enum: Mapping[float, str] | None = None
     legend_loc: str = "upper right"
+    legend_frame_alpha: float = 0.95
 
 
 @dataclass(frozen=True, slots=True)

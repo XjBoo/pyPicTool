@@ -23,6 +23,7 @@ import warnings
 from .model import FigureSpec, PanelSpec, SeriesData, TooltipContext
 from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes, get_theme
 from .qt_toolbar import install_toolbar_toggle, install_series_selector
+from .legend import OverlayLegend
 
 # Keyboard cursor navigation owns keys that Matplotlib's default keymap binds
 # to navigation-toolbar view history (back/forward/home). Sessions claim the
@@ -64,15 +65,6 @@ def _restore_view_navigation_keys() -> None:
         for setting, snapshot in (_view_navigation_key_snapshots or {}).items():
             plt.rcParams[setting] = list(snapshot)
         _view_navigation_key_snapshots = None
-
-
-class OverlayLegend(Legend):
-    """Keep Axes.get_legend/picking while drawing in the interaction layer."""
-
-    def draw(self, renderer):
-        layer = getattr(self, "_interaction_layer", None)
-        if layer is None or layer.drawing:
-            super().draw(renderer)
 
 
 class InteractionLayer(Artist):
@@ -1269,6 +1261,7 @@ class FigureDispatcher:
                 controller.layer.disconnect()
         for legend in self.legends:
             legend.set_draggable(False)
+            legend.release_placement()
         self.active_controller = None
         self.keyboard_controller = None
         self.dragging_controller = None
@@ -1317,7 +1310,7 @@ class PlotSession:
         location = self._panels[primary].legend_loc
         if old is not None:
             # A dragged legend stores its location in axes-relative coordinates.
-            location = old._loc
+            location = "best_corner" if old._corner_auto else old._loc
             old.set_draggable(False)
             self._legend_series.pop(old, None)
             old.remove()
@@ -1326,9 +1319,16 @@ class PlotSession:
         if records:
             target = self._dispatcher.layout.groups[primary][-1]
             legend = _make_legend(target, records, location, self._theme,
-                                  draggable=not self.series_selection_mode)
+                                  draggable=not self.series_selection_mode,
+                                  frame_alpha=self._panels[primary].legend_frame_alpha,
+                                  data_records=[r for r in self.series if r.primary_axis is primary])
+            if old is not None:
+                legend._corner = old._corner
+                old.release_placement()
             self._layer.add(legend)
             self._legend_series[legend] = records
+        elif old is not None:
+            old.release_placement()
         self._dispatcher.legends = tuple(self._legend_series)
 
     def set_series_selection_mode(self, enabled: bool) -> None:
@@ -1530,7 +1530,8 @@ def create_interactive_plot(series: Sequence[SeriesData]) -> PlotSession:
     ))
 
 
-def _make_legend(axis, records, location, theme_name, draggable=True):
+def _make_legend(axis, records, location, theme_name, draggable=True,
+                 frame_alpha=0.95, data_records=()):
     theme = get_theme(theme_name)
     handles = []
     for record in records:
@@ -1542,9 +1543,10 @@ def _make_legend(axis, records, location, theme_name, draggable=True):
             markerfacecolor=item.color, markeredgecolor=item.color,
         ))
     legend = OverlayLegend(axis,
+        data_records=data_records,
         handles=handles, labels=[r.data.label for r in records],
         loc=location, prop={"family": font_families(), "size": 8},
-        facecolor="white", edgecolor=theme.border, framealpha=0.95,
+        facecolor="white", edgecolor=theme.border, framealpha=frame_alpha,
         labelcolor=theme.text, borderpad=0.7, labelspacing=0.45,
         handlelength=2, handletextpad=0.7,
     )
@@ -1652,7 +1654,9 @@ def _build_figure(spec: FigureSpec) -> PlotSession:
                 _apply_enum(ax, panel.y_enum)
                 named = [r for r in records if r.primary_axis is ax and r.data.label]
                 if named:
-                    legend = _make_legend(right if right is not None else ax, named, panel.legend_loc, spec.theme)
+                    legend = _make_legend(right if right is not None else ax, named, panel.legend_loc, spec.theme,
+                                          frame_alpha=panel.legend_frame_alpha,
+                                          data_records=[r for r in records if r.primary_axis is ax])
                     # Legends retain gesture and drawing priority over tooltips.
                     layer.add(legend)
                     legend_series[legend] = named
