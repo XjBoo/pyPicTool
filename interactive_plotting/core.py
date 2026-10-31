@@ -1669,10 +1669,12 @@ class PlotSession:
 
     def _paste_target_panel(self) -> Axes | None:
         target = self._paste_target_axis
-        if target is not None:
-            if target in self._panels and target.get_visible():
-                return target
-            return None
+        if (
+            target is not None
+            and target in self._panels
+            and target.get_visible()
+        ):
+            return target
         visible = [
             axis for axis in self.axes
             if axis in self._panels and axis.get_visible()

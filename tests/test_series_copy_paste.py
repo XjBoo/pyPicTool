@@ -631,6 +631,31 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertEqual(len(target.series), before + 1)
         self.assertIs(target.series[-1].primary_axis, second)
 
+    def test_hidden_target_falls_back_to_only_visible_panel(self):
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="First")
+        target_description.subplot(2).plot([0, 1], [2, 3], label="Second")
+        target = self.build(target_description)
+        first, second = target.axes
+        series_clipboard.store_series(
+            SeriesData([0, 1], [1, 0], "Pasted"),
+        )
+        self.click(target, second, .1, 2.9)
+        self.assertIs(target._paste_target_axis, second)
+        self.click(target, first, .1, .9, dblclick=True)
+        self.assertIs(target._dispatcher.layout.maximized_axes, first)
+        before = len(target.series)
+        send_key_event(target, "ctrl+v")
+        self.assertEqual(len(target.series), before + 1)
+        pasted = next(
+            record for record in target.series
+            if record.data.label == "Pasted" and not record.removed
+        )
+        self.assertIs(pasted.primary_axis, first)
+        self.assertIs(target._paste_target_axis, first)
+        self.assertFalse(target._paste_target_outlines[second].get_visible())
+        self.assertTrue(target._paste_target_outlines[first].get_visible())
+
     def test_double_click_maximizes_without_confirming_paste_target(self):
         source = self.make_source()
         self.copy_via_shortcut(source)
