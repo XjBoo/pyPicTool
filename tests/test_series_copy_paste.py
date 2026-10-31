@@ -8,10 +8,11 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.backend_bases import CloseEvent
 from matplotlib.colors import to_rgba
 
 from interactive_plotting import SeriesData, figure
-from interactive_plotting import series_clipboard
+from interactive_plotting import core, series_clipboard
 from tests.test_public_api import (
     send_canvas_mouse_event, send_key_event, send_mouse_event,
 )
@@ -185,6 +186,36 @@ class RuntimeSeriesAppendTests(SessionTestCase):
         session.restore_layout()
         self.assertEqual(tuple(primary.get_position().bounds), left_position)
         self.assertEqual(tuple(right.get_position().bounds), right_position)
+
+    def test_new_controllers_use_overlay_when_panel_has_twin_axis(self):
+        description = figure(rows=1, cols=2)
+        description.subplot(1, right_ylabel="Pressure")
+        description.subplot(2)
+        session = self.build(description)
+        self.assertIn(1, session.right_axes)
+        session._append_series(
+            SeriesData([0, 1], [10, 20], "Left first"),
+            session.axes[0],
+        )
+        left_controller = self.controller_for(session, session.axes[0])
+        self.assertFalse(left_controller._keep_axes)
+        self.assertNotIn(left_controller.hover_highlight, session.axes[0].lines)
+
+        session._append_series(
+            SeriesData([0, 1], [100, 200], "Right", yaxis="right"),
+            session.axes[1],
+        )
+        right_controller = self.controller_for(
+            session, session.right_axes[2],
+        )
+        self.assertFalse(right_controller._keep_axes)
+        session._append_series(
+            SeriesData([0, 1], [1, 2], "Left second"),
+            session.axes[1],
+        )
+        left_secondary = self.controller_for(session, session.axes[1])
+        self.assertFalse(left_secondary._keep_axes)
+        self.assertNotIn(left_secondary.hover_highlight, session.axes[1].lines)
 
     def test_dynamic_right_axis_created_while_panel_is_maximized(self):
         description = figure(rows=2)
@@ -481,6 +512,32 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.click(session, target_panel, 0, 10)
         self.assertIsNotNone(controller.active_selection)
 
+    def test_selection_mode_tooltip_is_not_a_blank_paste_target(self):
+        description = figure()
+        description.subplot(1).plot([0, 1, 2], [0, 0, 0], label="Line")
+        session = self.build(description)
+        axis = session.axes[0]
+        self.click(session, axis, 0, 0, key="shift")
+        pin = session.controllers[0].pinned_selections[0]
+        send_key_event(session, "l")
+        self.click(session, axis, 1, 0)
+        send_key_event(session, "ctrl+c")
+        session.figure.canvas.draw()
+        tooltip = pin.tooltip
+        self.assertTrue(tooltip.get_visible())
+        bbox = tooltip.get_window_extent(session.figure.canvas.get_renderer())
+        center = ((bbox.x0 + bbox.x1) / 2, (bbox.y0 + bbox.y1) / 2)
+        send_canvas_mouse_event(session, "motion_notify_event", *center)
+        self.assertIsNone(session._paste_preview_axis)
+        send_canvas_mouse_event(
+            session, "button_press_event", *center, button=1,
+        )
+        send_canvas_mouse_event(
+            session, "button_release_event", *center, button=1,
+        )
+        self.assertIsNone(session._paste_target_axis)
+        self.assertIsNone(session.selected_series)
+
     def test_blank_click_moves_target_between_panels(self):
         source = self.make_source()
         target_description = figure(rows=1, cols=2)
@@ -502,6 +559,40 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertEqual(len(target.series), before + 1)
         self.assertIs(target.series[-1].primary_axis, second)
 
+    def test_double_click_maximizes_without_confirming_paste_target(self):
+        source = self.make_source()
+        self.copy_via_shortcut(source)
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="First")
+        target_description.subplot(2).plot([0, 1], [2, 3], label="Second")
+        target = self.build(target_description)
+        first = target.axes[0]
+        self.click(target, first, .1, .9, dblclick=True)
+        self.assertIsNone(target._paste_target_axis)
+        self.assertIs(target._dispatcher.layout.maximized_axes, first)
+        target.restore_layout()
+
+    def test_legend_click_in_selection_mode_does_not_confirm_target(self):
+        description = figure()
+        subplot = description.subplot(1)
+        subplot.plot([0, 1], [0, 1], label="First")
+        subplot.plot([0, 1], [1, 0], label="Second")
+        session = self.build(description)
+        axis = session.axes[0]
+        send_key_event(session, "l")
+        self.click(session, axis, 0, 0)
+        send_key_event(session, "ctrl+c")
+        legend = axis.get_legend()
+        session.figure.canvas.draw()
+        renderer = session.figure.canvas.get_renderer()
+        bbox = legend.texts[1].get_window_extent(renderer)
+        send_canvas_mouse_event(
+            session, "button_press_event",
+            (bbox.x0 + bbox.x1) / 2, (bbox.y0 + bbox.y1) / 2, button=1,
+        )
+        self.assertIs(session.selected_series, session.series[1])
+        self.assertIsNone(session._paste_target_axis)
+
     def test_normal_escape_is_local_when_no_selection_mode_remains(self):
         source = self.make_source()
         self.copy_via_shortcut(source)
@@ -522,6 +613,25 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         before = len(target.series)
         send_key_event(target, "ctrl+v")
         self.assertEqual(len(target.series), before + 1)
+
+    def test_l_exit_in_second_window_keeps_session_while_source_mode_remains(self):
+        source = self.make_source()
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="First")
+        target_description.subplot(2).plot([0, 1], [2, 3], label="Second")
+        target = self.build(target_description)
+        self.copy_via_shortcut(source)
+        send_key_event(target, "l")
+        self.assertTrue(target.series_selection_mode)
+        send_key_event(target, "l")
+        self.assertFalse(target.series_selection_mode)
+        self.assertTrue(source.series_selection_mode)
+        self.assertTrue(series_clipboard.is_active())
+        send_mouse_event(target, "motion_notify_event", target.axes[1], .1, 2.9)
+        self.assertIs(target._paste_preview_axis, target.axes[1])
+        send_key_event(target, "escape")
+        self.assertFalse(source.series_selection_mode)
+        self.assertFalse(series_clipboard.is_active())
 
     def test_escape_in_target_exits_source_selection_mode_and_disarms(self):
         source = self.make_source()
@@ -661,6 +771,29 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.click(target, empty, 1, 20)
         self.assertIsNotNone(controller.active_selection)
         self.assertIs(target._paste_target_axis, empty)
+
+    def test_close_event_cleans_target_state_and_live_session_registry(self):
+        series_clipboard.store_series(
+            SeriesData([0, 1], [10, 20], "Waiting")
+        )
+        description = figure(rows=1, cols=2)
+        description.subplot(1).plot([0, 1], [0, 1], label="One")
+        description.subplot(2).plot([0, 1], [1, 0], label="Two")
+        target = self.build(description)
+        self.click(target, target.axes[0], .1, .9)
+        self.assertIs(target._paste_target_axis, target.axes[0])
+        self.assertIn(id(target), core._LIVE_SESSIONS)
+        target.figure.canvas.callbacks.process(
+            "close_event", CloseEvent("close_event", target.figure.canvas),
+        )
+        self.assertFalse(target._dispatcher.connected)
+        self.assertIsNone(target._paste_target_axis)
+        self.assertIsNone(target._paste_preview_axis)
+        self.assertEqual(target._paste_target_outlines, {})
+        self.assertEqual(target._paste_preview_outlines, {})
+        self.assertNotIn(id(target), core._LIVE_SESSIONS)
+        self.assertTrue(series_clipboard.is_active())
+        target.close()
 
     def test_disconnected_target_rejects_paste_and_cleans_highlights(self):
         series_clipboard.store_series(

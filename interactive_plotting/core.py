@@ -1182,6 +1182,11 @@ class FigureDispatcher:
             return None
         if self._legend_at(event) is not None:
             return None
+        if any(
+            controller.ax.get_visible() and controller.contains_tooltip(event)
+            for controller in self.controllers
+        ):
+            return None
         primary = self.session._primary_panel_at(event)
         if primary is None:
             return None
@@ -1282,13 +1287,12 @@ class FigureDispatcher:
             selected = self.session._select_from_event(event)
             if (
                 selected is None
-                and self.session._clipboard_available()
                 and getattr(event, "button", None) == 1
                 and not getattr(event, "dblclick", False)
             ):
-                primary = self.session._primary_panel_at(event)
-                if primary is not None:
-                    self.session._confirm_paste_target(primary)
+                target = self._paste_target_candidate(event)
+                if target is not None:
+                    self.session._confirm_paste_target(target)
             return
         paste_candidate = self._paste_target_candidate(event)
         controller = next(
@@ -1431,7 +1435,10 @@ class FigureDispatcher:
             controller.invalidate_if_transform_changed()
 
     def on_close(self, _event: CloseEvent) -> None:
-        self.disconnect()
+        if self.session is not None:
+            self.session._handle_window_close()
+        else:
+            self.disconnect()
 
     def remove_selected_cursor(self) -> bool:
         controller = self.keyboard_controller
@@ -1770,7 +1777,7 @@ class PlotSession:
         if controller is None:
             controller = DataCursor(
                 target, (item,), self._layer,
-                keep_axes=target is primary and primary not in self.right_axes.values(),
+                keep_axes=len(self._dispatcher.layout.groups[primary]) == 1,
             )
             self._register_controller(controller)
         else:
@@ -1802,7 +1809,16 @@ class PlotSession:
         if enabled:
             series_clipboard.arm()
         elif disarm_paste:
-            _disarm_paste_targets()
+            other_modes = [
+                session for session in _live_sessions()
+                if session is not self
+                and session.series_selection_mode
+                and session._dispatcher.connected
+            ]
+            if other_modes:
+                self._clear_paste_highlights(request_draw=False)
+            else:
+                _disarm_paste_targets()
         self.series_selection_mode = enabled
         for legend in self._legend_series:
             legend.set_draggable(not enabled)
@@ -1930,6 +1946,12 @@ class PlotSession:
             toolbar.push_current()
         self.figure.canvas.draw_idle()
         return True
+
+    def _handle_window_close(self) -> None:
+        if self._closed:
+            return
+        self.disconnect()
+        _unregister_live_session(self)
 
     def disconnect(self) -> None:
         self._dispose_paste_outlines()
