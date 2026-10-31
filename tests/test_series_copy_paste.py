@@ -562,6 +562,28 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.click(session, target_panel, 0, 10)
         self.assertIsNotNone(controller.active_selection)
 
+    def test_hidden_tooltip_does_not_block_blank_paste_target(self):
+        description = figure()
+        description.subplot(1).plot([0, 1], [0, 1], label="Line")
+        session = self.build(description)
+        axis = session.axes[0]
+        self.click(session, axis, 0, 0)
+        active = session.controllers[0].active_selection
+        self.assertIsNotNone(active)
+        active.tooltip.set_position((40, 40))
+        session.figure.canvas.draw()
+        bbox = active.tooltip.get_window_extent(
+            session.figure.canvas.get_renderer(),
+        )
+        center = ((bbox.x0 + bbox.x1) / 2, (bbox.y0 + bbox.y1) / 2)
+        self.click(session, axis, 0, 0)
+        self.assertFalse(active.tooltip.get_visible())
+        series_clipboard.store_series(
+            SeriesData([0, 1], [1, 0], "Pasted"),
+        )
+        send_canvas_mouse_event(session, "motion_notify_event", *center)
+        self.assertIs(session._paste_preview_axis, axis)
+
     def test_selection_mode_tooltip_is_not_a_blank_paste_target(self):
         description = figure()
         description.subplot(1).plot([0, 1, 2], [0, 0, 0], label="Line")
@@ -916,6 +938,79 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertIsNone(target._paste_target_axis)
         self.assertEqual(target._paste_target_outlines, {})
         self.assertIsNotNone(series_clipboard.get_series())
+
+    def test_legend_drag_pauses_preview_and_paste(self):
+        description = figure()
+        description.subplot(1).plot([0, 1], [0, 1], label="Existing")
+        session = self.build(description)
+        axis = session.axes[0]
+        series_clipboard.store_series(
+            SeriesData([0, 1], [1, 0], "Pasted"),
+        )
+        session.figure.canvas.draw()
+        legend = axis.get_legend()
+        bbox = legend.get_window_extent(
+            session.figure.canvas.get_renderer(),
+        )
+        center = ((bbox.x0 + bbox.x1) / 2, (bbox.y0 + bbox.y1) / 2)
+        send_canvas_mouse_event(
+            session, "button_press_event", *center, button=1,
+        )
+        self.assertIs(session._dispatcher.dragging_legend, legend)
+        send_mouse_event(session, "motion_notify_event", axis, .1, .9)
+        self.assertIsNone(session._paste_preview_axis)
+        before = len(session.series)
+        send_key_event(session, "ctrl+v")
+        self.assertEqual(len(session.series), before)
+        send_canvas_mouse_event(
+            session, "button_release_event", *center, button=1,
+        )
+        self.assertIsNone(session._dispatcher.dragging_legend)
+
+    def test_nonfinal_mode_exit_keeps_confirmed_target_in_other_window(self):
+        source = self.make_source()
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="First")
+        target_description.subplot(2).plot([0, 1], [2, 3], label="Second")
+        target = self.build(target_description)
+        second = target.axes[1]
+        self.copy_via_shortcut(source)
+        self.click(target, second, .1, 2.9)
+        self.assertIs(target._paste_target_axis, second)
+        outline = target._paste_target_outlines[second]
+        self.assertTrue(outline.get_visible())
+
+        extra_description = figure()
+        extra_description.subplot(1).plot([0, 1], [0, 1], label="Extra")
+        extra = self.build(extra_description)
+        send_key_event(extra, "l")
+        send_key_event(extra, "l")
+        self.assertFalse(extra.series_selection_mode)
+        self.assertTrue(source.series_selection_mode)
+        self.assertTrue(series_clipboard.is_active())
+        self.assertIs(target._paste_target_axis, second)
+        self.assertTrue(outline.get_visible())
+
+    def test_right_axis_paste_via_clipboard_creates_twin_and_shared_x(self):
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="Existing")
+        target_description.subplot(2)
+        target = self.build(target_description)
+        empty = target.axes[1]
+        series_clipboard.store_series(
+            SeriesData([10, 20], [100, 200], "Right", yaxis="right"),
+        )
+        self.click(target, empty, .5, .5)
+        self.assertIs(target._paste_target_axis, empty)
+        before = len(target.series)
+        send_key_event(target, "ctrl+v")
+        self.assertEqual(len(target.series), before + 1)
+        right = target.right_axes[2]
+        self.assertEqual(target.series[-1].data.label, "Right")
+        self.assertIs(target.series[-1].axis, right)
+        self.assertEqual(empty.get_xlim(), right.get_xlim())
+        self.assertLess(empty.get_xlim()[0], 10)
+        self.assertGreater(empty.get_xlim()[1], 20)
 
     def test_no_clipboard_and_navigation_or_drag_prevent_target_changes(self):
         description = figure(rows=1, cols=2)

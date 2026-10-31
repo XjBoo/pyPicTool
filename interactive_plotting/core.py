@@ -816,7 +816,10 @@ class DataCursor:
         return self._dragging_cursor is not None
 
     def contains_tooltip(self, event: MouseEvent) -> bool:
-        return any(cursor.tooltip.contains(event)[0] for cursor in self.cursors)
+        return any(
+            cursor.tooltip.get_visible() and cursor.tooltip.contains(event)[0]
+            for cursor in self.cursors
+        )
 
     def hit_test(self, event: MouseEvent) -> bool:
         """Whether a click would target one of this panel's data points."""
