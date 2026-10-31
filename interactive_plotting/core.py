@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Sequence
+import weakref
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,6 +15,7 @@ from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from matplotlib.markers import MarkerStyle
+from matplotlib.patches import Rectangle
 from matplotlib.typing import ColorType
 from matplotlib.ticker import FixedLocator, FuncFormatter
 from matplotlib.transforms import Bbox
@@ -24,6 +26,7 @@ from .model import FigureSpec, PanelSpec, SeriesData, TooltipContext
 from .style import BORDER, CANVAS, MUTED, TEXT, font_families, style_axes, get_theme
 from .qt_toolbar import install_toolbar_toggle, install_series_selector
 from .legend import OverlayLegend
+from . import series_clipboard
 
 # Keyboard cursor navigation owns keys that Matplotlib's default keymap binds
 # to navigation-toolbar view history (back/forward/home). Sessions claim the
@@ -37,6 +40,7 @@ _VIEW_NAVIGATION_KEY_REMOVALS: dict[str, tuple[str, ...]] = {
 }
 _view_navigation_key_claims = 0
 _view_navigation_key_snapshots: dict[str, list[str]] | None = None
+_LIVE_SESSIONS: dict[int, weakref.ReferenceType] = {}
 
 
 def _suppress_view_navigation_keys() -> None:
@@ -65,6 +69,68 @@ def _restore_view_navigation_keys() -> None:
         for setting, snapshot in (_view_navigation_key_snapshots or {}).items():
             plt.rcParams[setting] = list(snapshot)
         _view_navigation_key_snapshots = None
+
+
+def _register_live_session(session: PlotSession) -> None:
+    key = id(session)
+
+    def discard(reference):
+        if _LIVE_SESSIONS.get(key) is reference:
+            _LIVE_SESSIONS.pop(key, None)
+
+    _LIVE_SESSIONS[key] = weakref.ref(session, discard)
+
+
+def _unregister_live_session(session: PlotSession) -> None:
+    reference = _LIVE_SESSIONS.get(id(session))
+    if reference is not None and reference() is session:
+        _LIVE_SESSIONS.pop(id(session), None)
+
+
+def _live_sessions():
+    for reference in tuple(_LIVE_SESSIONS.values()):
+        session = reference()
+        if session is not None:
+            yield session
+
+
+def _disarm_paste_targets() -> None:
+    series_clipboard.disarm()
+    for session in _live_sessions():
+        if session._clear_paste_highlights(request_draw=False):
+            session.figure.canvas.draw_idle()
+
+
+def _exit_series_selection_modes() -> bool:
+    """Exit every active whole-line mode, regardless of which window receives Esc."""
+    sessions = [
+        session for session in _live_sessions()
+        if session.series_selection_mode and session._dispatcher.connected
+    ]
+    if not sessions:
+        return False
+    _disarm_paste_targets()
+    for session in sessions:
+        session._set_series_selection_mode(
+            False, request_draw=True, disarm_paste=False,
+        )
+    return True
+
+
+def _clipboard_shortcut(event: KeyEvent) -> str | None:
+    """Normalize Ctrl/Cmd copy and paste spellings emitted by backends."""
+    parts = (getattr(event, "key", "") or "").lower().split("+")
+    if len(parts) < 2:
+        return None
+    key = parts[-1]
+    modifiers = set(parts[:-1])
+    if (
+        key not in ("c", "v")
+        or not modifiers
+        or modifiers - {"ctrl", "control", "cmd", "command", "meta"}
+    ):
+        return None
+    return "copy" if key == "c" else "paste"
 
 
 class InteractionLayer(Artist):
@@ -752,6 +818,22 @@ class DataCursor:
     def contains_tooltip(self, event: MouseEvent) -> bool:
         return any(cursor.tooltip.contains(event)[0] for cursor in self.cursors)
 
+    def hit_test(self, event: MouseEvent) -> bool:
+        """Whether a click would target one of this panel's data points."""
+        if (
+            not self._connected
+            or event.inaxes not in self.panel_axes
+            or getattr(event, "x", None) is None
+            or getattr(event, "y", None) is None
+        ):
+            return False
+        if self.contains_tooltip(event):
+            return True
+        if not self.series_list:
+            return False
+        _, _, distance_squared = self._nearest_point_from_px(event.x, event.y)
+        return distance_squared <= self._hit_radius_pixels() ** 2
+
     def capture_state(self) -> StateSnapshot:
         return DataCursor.StateSnapshot(
             cursors=tuple(
@@ -819,6 +901,16 @@ class DataCursor:
         self._dragging_cursor = None
         self._drag_start_mouse = None
         self._drag_start_position = None
+
+    def append_series(self, series: SeriesData) -> int:
+        """Append one series without renumbering existing cursors or indices."""
+        index = len(self.series_list)
+        self.series_list = (*self.series_list, series)
+        self._valid_indices_list.append(np.flatnonzero(series.valid_mask))
+        self._disp_xy_list = None
+        self._disp_indices_list = None
+        self._invalidate_disp_cache()
+        return index
 
     def remove_series(self, index: int) -> None:
         """Remove one series and only its selections; preserve other indices."""
@@ -913,6 +1005,35 @@ class AxesLayoutManager:
         )
         self._maximized_position = (left, bottom, right - left, top - bottom)
 
+    def add_twin(self, primary: Axes, twin: Axes) -> None:
+        """Register one runtime twin while preserving captured restore state."""
+        if primary not in self._states:
+            raise ValueError("primary axis does not belong to this layout")
+        if twin in self._states:
+            return
+        state = self._states[primary]
+        group = (primary, twin)
+        self.axes = (*self.axes, twin)
+        self.groups[primary] = self.groups[twin] = group
+        self._states[twin] = AxesLayoutState(
+            visible=state.visible,
+            in_layout=state.in_layout,
+            original_position=state.original_position,
+            active_position=state.active_position,
+        )
+        twin.set_position(state.original_position, which="original")
+        if self.maximized_axes is not None:
+            if primary in self.groups[self.maximized_axes]:
+                twin.set_position(self._maximized_position, which="both")
+                twin.set_visible(state.visible)
+                twin.set_in_layout(False)
+            else:
+                twin.set_visible(False)
+        else:
+            twin.set_position(state.active_position, which="active")
+            twin.set_visible(state.visible)
+            twin.set_in_layout(state.in_layout)
+
     def toggle(self, axis: Axes) -> bool:
         if axis not in self._states:
             raise ValueError("axis does not belong to this PlotSession")
@@ -997,6 +1118,19 @@ class FigureDispatcher:
         ]
         _suppress_view_navigation_keys()
 
+    def register_controller(self, controller: DataCursor) -> None:
+        """Add one runtime controller and refresh its panel group."""
+        if controller in self.controllers:
+            return
+        self.controllers = (*self.controllers, controller)
+        self._by_axes[controller.ax] = controller
+        self.sync_panel_axes()
+
+    def sync_panel_axes(self) -> None:
+        """Synchronize every controller with the current twin-axis groups."""
+        for controller in self.controllers:
+            controller.panel_axes = self.layout.groups[controller.ax]
+
     def _toolbar_is_active(self) -> bool:
         manager = getattr(self.figure.canvas, "manager", None)
         toolbar = getattr(manager, "toolbar", None)
@@ -1036,6 +1170,28 @@ class FigureDispatcher:
             return candidates[0]
         return min(candidates, key=lambda c: c._nearest_point_from_px(event.x, event.y)[2])
 
+    def _interactive_hit_at(self, event: MouseEvent) -> bool:
+        return any(
+            controller.ax.get_visible() and controller.hit_test(event)
+            for controller in self.controllers
+        )
+
+    def _paste_target_candidate(self, event: MouseEvent) -> Axes | None:
+        """Return a panel only when this pointer location represents blank area."""
+        if self.session is None or not self.session._clipboard_available():
+            return None
+        if self._legend_at(event) is not None:
+            return None
+        primary = self.session._primary_panel_at(event)
+        if primary is None:
+            return None
+        if self.session.series_selection_mode:
+            if self.session._series_at_event(event) is not None:
+                return None
+        elif self._interactive_hit_at(event):
+            return None
+        return primary
+
     def _hide_transient_highlights(
         self, except_controller: DataCursor | None = None
     ) -> bool:
@@ -1051,21 +1207,36 @@ class FigureDispatcher:
         if not self.connected:
             return
         if self._toolbar_is_active():
+            if self.session is not None:
+                self.session._set_paste_preview(None)
             return
         if self.dragging_legend is not None:
+            if self.session is not None:
+                self.session._set_paste_preview(None)
             return
         if self.session and self.session.series_selection_mode:
+            self.session._set_paste_preview(
+                self._paste_target_candidate(event),
+            )
             return
         if self.dragging_controller is not None:
+            if self.session is not None:
+                self.session._set_paste_preview(None)
             self.dragging_controller.on_hover(event)
             return
+        preview_changed = False
+        if self.session is not None:
+            preview_changed = self.session._set_paste_preview(
+                self._paste_target_candidate(event),
+                request_draw=False,
+            )
         controller = self._controller_at(event)
         if controller is None:
-            if self._hide_transient_highlights():
+            if self._hide_transient_highlights() or preview_changed:
                 self._refresh_hover()
             return
         self.active_controller = controller
-        need_draw = controller.on_hover(event)
+        need_draw = controller.on_hover(event) or preview_changed
         if self._hide_transient_highlights(controller):
             need_draw = True
         if need_draw or self.figure.stale:
@@ -1079,15 +1250,26 @@ class FigureDispatcher:
             layer.refresh()
 
     def on_leave(self, _event):
-        if self.connected and self._hide_transient_highlights():
+        if not self.connected:
+            return
+        preview_changed = False
+        if self.session is not None:
+            preview_changed = self.session._set_paste_preview(
+                None, request_draw=False,
+            )
+        if self._hide_transient_highlights() or preview_changed:
             self._refresh_hover()
 
     def on_press(self, event: MouseEvent) -> None:
         if self._toolbar_is_active() or self.dragging_controller is not None:
+            if self.session is not None:
+                self.session._set_paste_preview(None)
             self._pending_axes_click = None
             return
         legend = self._legend_at(event)
         if legend is not None:
+            if self.session is not None:
+                self.session._set_paste_preview(None)
             self._pending_axes_click = None
             if self.session and self.session.series_selection_mode:
                 self.session._select_from_event(event, legend)
@@ -1095,9 +1277,20 @@ class FigureDispatcher:
                 self.dragging_legend = legend
             return
         if self.session and self.session.series_selection_mode:
+            self.session._set_paste_preview(None)
             self._pending_axes_click = None
-            self.session._select_from_event(event)
+            selected = self.session._select_from_event(event)
+            if (
+                selected is None
+                and self.session._clipboard_available()
+                and getattr(event, "button", None) == 1
+                and not getattr(event, "dblclick", False)
+            ):
+                primary = self.session._primary_panel_at(event)
+                if primary is not None:
+                    self.session._confirm_paste_target(primary)
             return
+        paste_candidate = self._paste_target_candidate(event)
         controller = next(
             (
                 candidate
@@ -1122,6 +1315,12 @@ class FigureDispatcher:
             controller = self._controller_at(event)
         if controller is None:
             self._pending_axes_click = None
+            if (
+                paste_candidate is not None
+                and getattr(event, "button", None) == 1
+                and not getattr(event, "dblclick", False)
+            ):
+                self.session._confirm_paste_target(paste_candidate)
             if (event.inaxes in self.layout.axes
                     and event.inaxes.get_visible()
                     and getattr(event, "button", None) == 1
@@ -1145,6 +1344,8 @@ class FigureDispatcher:
             self.layout.toggle(controller.ax)
             return
         self._pending_axes_click = None
+        if paste_candidate is not None and getattr(event, "button", None) == 1:
+            self.session._confirm_paste_target(paste_candidate)
         if getattr(event, "button", None) == 1:
             self._pending_axes_click = PendingAxesClick(
                 controller=controller,
@@ -1188,16 +1389,28 @@ class FigureDispatcher:
             return
         self._pending_axes_click = None
         key = (getattr(event, "key", "") or "").lower()
-        if self.session and key == "l":
-            self.session.set_series_selection_mode(not self.session.series_selection_mode)
+        shortcut = _clipboard_shortcut(event)
+        if self.session and shortcut == "copy":
+            self.session._copy_selected_series()
+            return
+        if self.session and shortcut == "paste":
+            self.session._paste_clipboard_series()
+            return
+        if key == "l":
+            if self.session:
+                self.session.set_series_selection_mode(
+                    not self.session.series_selection_mode,
+                )
+            return
+        if key in ("escape", "esc") and _exit_series_selection_modes():
             return
         if self.session and self.session.series_selection_mode:
-            if key in ("escape", "esc"):
-                self.session.set_series_selection_mode(False)
-            elif key in ("delete", "backspace") and self.session.selected_series:
+            if key in ("delete", "backspace") and self.session.selected_series:
                 self.session.remove_series(self.session.selected_series)
             return
-        if getattr(event, "key", "").lower() in ("escape", "esc"):
+        if key in ("escape", "esc"):
+            if self.session and self.session._clear_paste_highlights():
+                return
             if self.layout.restore():
                 return
             self.clear_extra_cursors()
@@ -1285,7 +1498,7 @@ class SeriesHandle:
 
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, weakref_slot=True)
 class PlotSession:
     """Own the figure and controller references created for one plot."""
 
@@ -1302,7 +1515,171 @@ class PlotSession:
     _selection_artist: Line2D | None = field(default=None, init=False)
     series_selection_mode: bool = field(default=False, init=False)
     selected_series: SeriesHandle | None = field(default=None, init=False)
+    _paste_preview_axis: Axes | None = field(default=None, init=False)
+    _paste_target_axis: Axes | None = field(default=None, init=False)
+    _paste_preview_outlines: dict = field(default_factory=dict, init=False)
+    _paste_target_outlines: dict = field(default_factory=dict, init=False)
     _closed: bool = field(default=False, init=False)
+
+    def _clipboard_available(self) -> bool:
+        return (
+            not self._closed
+            and self._dispatcher.connected
+            and series_clipboard.is_active()
+        )
+
+    def _ensure_paste_outline(self, primary: Axes, *, confirmed: bool) -> Rectangle:
+        outlines = (
+            self._paste_target_outlines
+            if confirmed
+            else self._paste_preview_outlines
+        )
+        outline = outlines.get(primary)
+        if outline is None:
+            outline = Rectangle(
+                (0, 0), 1, 1, fill=False,
+                edgecolor="#2563EB",
+                linewidth=1.8 if confirmed else 1.2,
+                linestyle="-" if confirmed else "--",
+                alpha=0.9 if confirmed else 0.5,
+                clip_on=False, zorder=8.4 if confirmed else 8.3,
+            )
+            outline.set_transform(primary.transAxes)
+            outline.set_in_layout(False)
+            outline.set_picker(False)
+            outline.set_visible(False)
+            primary.add_artist(outline)
+            self._layer.add(outline)
+            outlines[primary] = outline
+        return outline
+
+    def _set_paste_preview(self, primary: Axes | None, *,
+                           request_draw: bool = True) -> bool:
+        if (
+            primary is not None
+            and (
+                not self._clipboard_available()
+                or primary is self._paste_target_axis
+                or primary not in self._panels
+                or not primary.get_visible()
+            )
+        ):
+            primary = None
+        previous = self._paste_preview_axis
+        if primary is previous:
+            return False
+        if previous is not None:
+            outline = self._paste_preview_outlines.get(previous)
+            if outline is not None:
+                outline.set_visible(False)
+        if primary is not None:
+            self._ensure_paste_outline(primary, confirmed=False).set_visible(True)
+        self._paste_preview_axis = primary
+        if request_draw:
+            self.figure.canvas.draw_idle()
+        return True
+
+    def _confirm_paste_target(self, primary: Axes, *,
+                              request_draw: bool = True) -> bool:
+        if (
+            not self._clipboard_available()
+            or primary not in self._panels
+            or not primary.get_visible()
+        ):
+            return False
+        previous = self._paste_target_axis
+        if primary is previous:
+            return False
+        if previous is not None:
+            outline = self._paste_target_outlines.get(previous)
+            if outline is not None:
+                outline.set_visible(False)
+        self._ensure_paste_outline(primary, confirmed=True).set_visible(True)
+        self._paste_target_axis = primary
+        self._set_paste_preview(None, request_draw=False)
+        if request_draw:
+            self.figure.canvas.draw_idle()
+        return True
+
+    def _clear_paste_highlights(self, *, request_draw: bool = True) -> bool:
+        changed = False
+        if self._paste_preview_axis is not None:
+            outline = self._paste_preview_outlines.get(self._paste_preview_axis)
+            if outline is not None:
+                outline.set_visible(False)
+            self._paste_preview_axis = None
+            changed = True
+        if self._paste_target_axis is not None:
+            outline = self._paste_target_outlines.get(self._paste_target_axis)
+            if outline is not None:
+                outline.set_visible(False)
+            self._paste_target_axis = None
+            changed = True
+        if changed and request_draw:
+            self.figure.canvas.draw_idle()
+        return changed
+
+    def _dispose_paste_outlines(self) -> None:
+        for outline in (
+            *self._paste_preview_outlines.values(),
+            *self._paste_target_outlines.values(),
+        ):
+            if outline.axes is not None:
+                outline.remove()
+        self._paste_preview_outlines.clear()
+        self._paste_target_outlines.clear()
+        self._paste_preview_axis = None
+        self._paste_target_axis = None
+
+    def _primary_panel_at(self, event: MouseEvent) -> Axes | None:
+        axis = getattr(event, "inaxes", None)
+        if axis is None:
+            return None
+        group = self._dispatcher.layout.groups.get(axis)
+        if not group:
+            return None
+        primary = group[0]
+        if (
+            primary not in self._panels
+            or not primary.get_visible()
+            or not axis.get_visible()
+        ):
+            return None
+        return primary
+
+    def _copy_selected_series(self) -> bool:
+        if (
+            not self.series_selection_mode
+            or self.selected_series is None
+            or self.selected_series.removed
+        ):
+            return False
+        series_clipboard.store_series(self.selected_series.data)
+        return True
+
+    def _paste_target_panel(self) -> Axes | None:
+        target = self._paste_target_axis
+        if target is not None:
+            if target in self._panels and target.get_visible():
+                return target
+            return None
+        visible = [
+            axis for axis in self.axes
+            if axis in self._panels and axis.get_visible()
+        ]
+        if len(visible) != 1:
+            return None
+        self._confirm_paste_target(visible[0])
+        return visible[0]
+
+    def _paste_clipboard_series(self) -> SeriesHandle | None:
+        snapshot = series_clipboard.get_series()
+        if snapshot is None or not self._clipboard_available():
+            return None
+        target = self._paste_target_panel()
+        if target is None:
+            return None
+        return self._append_series(snapshot, target)
 
     def _refresh_legend(self, primary: Axes) -> None:
         old = next((legend for legend, records in self._legend_series.items()
@@ -1331,15 +1708,101 @@ class PlotSession:
             old.release_placement()
         self._dispatcher.legends = tuple(self._legend_series)
 
+    def _register_controller(self, controller: DataCursor) -> None:
+        self.controllers = (*self.controllers, controller)
+        self._dispatcher.register_controller(controller)
+
+    def _ensure_right_axis(self, primary: Axes) -> Axes:
+        panel_index = self.axes.index(primary) + 1
+        existing = self.right_axes.get(panel_index)
+        if existing is not None:
+            return existing
+        panel = self._panels[primary]
+        right = _create_right_axis(
+            primary, panel, font_families(), get_theme(self._theme),
+        )
+        self.right_axes[panel_index] = right
+        self._dispatcher.layout.add_twin(primary, right)
+        self._dispatcher.sync_panel_axes()
+        return right
+
+    def _insert_series_record(self, record: SeriesHandle) -> None:
+        records = list(self.series)
+        order = {axis: index for index, axis in enumerate(self.axes)}
+        target_order = order[record.primary_axis]
+        same_panel = [
+            index for index, candidate in enumerate(records)
+            if candidate.primary_axis is record.primary_axis
+        ]
+        if same_panel:
+            position = same_panel[-1] + 1
+        else:
+            position = next(
+                (
+                    index for index, candidate in enumerate(records)
+                    if order[candidate.primary_axis] > target_order
+                ),
+                len(records),
+            )
+        records.insert(position, record)
+        self.series = tuple(records)
+
+    def _append_series(self, data: SeriesData, primary: Axes) -> SeriesHandle | None:
+        """Append one snapshot locally without rebuilding the target figure."""
+        if (
+            self._closed
+            or not self._dispatcher.connected
+            or primary not in self._panels
+            or not primary.get_visible()
+        ):
+            return None
+        panel = self._panels[primary]
+        try:
+            target = self._ensure_right_axis(primary) if data.yaxis == "right" else primary
+        except (KeyError, ValueError):
+            return None
+        item = replace(data, panel=panel.panel)
+        record = _render_series(target, primary, item)
+        controller = next(
+            (candidate for candidate in self.controllers if candidate.ax is target),
+            None,
+        )
+        if controller is None:
+            controller = DataCursor(
+                target, (item,), self._layer,
+                keep_axes=target is primary and primary not in self.right_axes.values(),
+            )
+            self._register_controller(controller)
+        else:
+            controller.append_series(item)
+        self._insert_series_record(record)
+        self._refresh_legend(primary)
+        _fit_panel_data(
+            self.series, primary, self._dispatcher.layout.groups[primary],
+        )
+        toolbar = getattr(getattr(self.figure.canvas, "manager", None), "toolbar", None)
+        if toolbar is not None:
+            toolbar.update()
+            toolbar.push_current()
+        self.figure.canvas.draw_idle()
+        return record
+
     def set_series_selection_mode(self, enabled: bool) -> None:
         """Enter whole-curve selection (also L / native 选线); Esc exits."""
         self._set_series_selection_mode(enabled, request_draw=True)
 
-    def _set_series_selection_mode(self, enabled: bool, *, request_draw: bool) -> None:
+    def _set_series_selection_mode(
+        self, enabled: bool, *, request_draw: bool,
+        disarm_paste: bool = True,
+    ) -> None:
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be bool")
         if not self._dispatcher.connected:
             return
+        if enabled:
+            series_clipboard.arm()
+        elif disarm_paste:
+            _disarm_paste_targets()
         self.series_selection_mode = enabled
         for legend in self._legend_series:
             legend.set_draggable(not enabled)
@@ -1386,16 +1849,16 @@ class PlotSession:
         if request_draw:
             self.figure.canvas.draw_idle()
 
-    def _select_from_event(self, event: MouseEvent, legend=None) -> None:
-        if event.button != 1:
-            return
+    def _series_at_event(self, event: MouseEvent, legend=None) -> SeriesHandle | None:
+        """Return the curve a selection-mode click would hit, without side effects."""
         if legend is not None:
             for record, text, handle in zip(self._legend_series.get(legend, ()),
                                             legend.texts, legend.legend_handles):
                 if text.contains(event)[0] or handle.contains(event)[0]:
-                    self._select_series(record)
-                    return
-            return
+                    return record
+            return None
+        if event.x is None or event.y is None:
+            return None
         group = self._dispatcher.layout.groups.get(event.inaxes, ())
         # Whole-curve selection retains its original physical-pixel tolerance.
         best, best_distance = None, 6.0 ** 2
@@ -1421,7 +1884,18 @@ class PlotSession:
             distance = min(distances, default=float("inf"))
             if distance <= best_distance:
                 best, best_distance = record, distance
-        self._select_series(best)
+        return best
+
+    def _select_from_event(self, event: MouseEvent, legend=None) -> SeriesHandle | None:
+        if event.button != 1:
+            return None
+        record = self._series_at_event(event, legend)
+        if legend is not None:
+            if record is not None:
+                self._select_series(record)
+            return record
+        self._select_series(record)
+        return record
 
     def remove_series(self, series: SeriesHandle) -> bool:
         """Delete a curve, its selections and legend entry, then fit remaining data.
@@ -1449,26 +1923,7 @@ class PlotSession:
         series.removed = True
         self._refresh_legend(series.primary_axis)
         group = dispatcher.layout.groups[series.primary_axis]
-        # Recompute from source data: relim() ignores scatter and includes cursors.
-        remaining = [r for r in self.series if r.axis in group and not r.removed]
-        for axis in group:
-            axis.dataLim = Bbox.null()
-            local = [r for r in remaining if r.axis is axis]
-            for record in local:
-                data = record.data
-                axis.update_datalim(np.column_stack((data.frames[data.valid_mask],
-                                                      data.values[data.valid_mask])))
-            axis.set_autoscaley_on(True)
-            if not local:
-                axis.set_ylim(0, 1, auto=True)
-            else:
-                axis.autoscale_view(scalex=False, scaley=True)
-        primary = series.primary_axis
-        primary.set_autoscalex_on(True)
-        if remaining:
-            primary.autoscale_view(scalex=True, scaley=False)
-        else:
-            primary.set_xlim(0, 1, auto=True)
+        _fit_panel_data(self.series, series.primary_axis, group)
         toolbar = getattr(getattr(self.figure.canvas, "manager", None), "toolbar", None)
         if toolbar is not None:
             toolbar.update()
@@ -1477,7 +1932,10 @@ class PlotSession:
         return True
 
     def disconnect(self) -> None:
-        self._set_series_selection_mode(False, request_draw=False)
+        self._dispose_paste_outlines()
+        self._set_series_selection_mode(
+            False, request_draw=False, disarm_paste=False,
+        )
         self._dispatcher.disconnect()
         button = getattr(self.figure.canvas, "_series_selector", None)
         if button is not None:
@@ -1489,6 +1947,7 @@ class PlotSession:
         self.disconnect()
         plt.close(self.figure)
         self._closed = True
+        _unregister_live_session(self)
 
     def remove_selected_cursor(self) -> bool:
         return self._dispatcher.remove_selected_cursor()
@@ -1565,6 +2024,64 @@ def _apply_enum(axis, mapping):
             lambda value, position: labels.get(value, f"{value:g}")))
 
 
+def _render_series(target: Axes, primary: Axes, item: SeriesData) -> SeriesHandle:
+    """Render one normalized series using the behavior shared by build and paste."""
+    line_color = item.line_color if item.line_color is not None else item.color
+    line, = target.plot(
+        item.frames, item.plotting_values,
+        label=item.label, color=line_color, alpha=item.line_alpha,
+        linestyle=item.linestyle, linewidth=item.linewidth,
+        solid_capstyle="round", zorder=2,
+    )
+    artists = [line]
+    if item.marker is not None:
+        artists.append(target.scatter(
+            item.frames[item.valid_mask], item.values[item.valid_mask],
+            color=item.color, marker=item.marker,
+            s=item.markersize ** 2,
+            linewidths=0 if MarkerStyle(item.marker).is_filled() else 1,
+            zorder=3, alpha=0.75,
+        ))
+    return SeriesHandle(item, target, primary, tuple(artists))
+
+
+def _fit_panel_data(records, primary: Axes, group) -> None:
+    """Fit one panel from source data, excluding cursors and overlay artists."""
+    remaining = [record for record in records
+                 if record.axis in group and not record.removed]
+    for axis in group:
+        axis.dataLim = Bbox.null()
+        local = [record for record in remaining if record.axis is axis]
+        for record in local:
+            data = record.data
+            axis.update_datalim(np.column_stack((
+                data.frames[data.valid_mask], data.values[data.valid_mask],
+            )))
+        axis.set_autoscaley_on(True)
+        if not local:
+            axis.set_ylim(0, 1, auto=True)
+        else:
+            axis.autoscale_view(scalex=False, scaley=True)
+    primary.set_autoscalex_on(True)
+    if remaining:
+        primary.autoscale_view(scalex=True, scaley=False)
+    else:
+        primary.set_xlim(0, 1, auto=True)
+
+
+def _create_right_axis(primary: Axes, panel: PanelSpec, families, theme) -> Axes:
+    """Create and style a panel's shared-X right axis."""
+    right = primary.twinx()
+    style_axes(right, families, theme)
+    right.grid(False)
+    right.spines["left"].set_visible(False)
+    right.spines["right"].set_visible(True)
+    right.patch.set_visible(False)
+    right.set_ylabel(panel.right_ylabel or "")
+    _apply_enum(right, panel.right_y_enum)
+    return right
+
+
 def _build_figure(spec: FigureSpec) -> PlotSession:
     """Render a validated description and install one interaction dispatcher."""
     theme = get_theme(spec.theme)
@@ -1610,35 +2127,12 @@ def _build_figure(spec: FigureSpec) -> PlotSession:
                 right = None
                 if (panel.right_ylabel is not None or panel.right_y_enum is not None
                         or any(item.yaxis == "right" for item in panel.series)):
-                    right = ax.twinx()
-                    style_axes(right, families, theme)
-                    right.grid(False)
-                    right.spines["left"].set_visible(False)
-                    right.spines["right"].set_visible(True)
-                    right.patch.set_visible(False)
-                    right.set_ylabel(panel.right_ylabel or "")
-                    _apply_enum(right, panel.right_y_enum)
+                    right = _create_right_axis(ax, panel, families, theme)
                     right_axes[row * spec.cols + column + 1] = right
                     groups[ax] = groups[right] = (ax, right)
                 for item in panel.series:
                     target = right if item.yaxis == "right" else ax
-                    line_color = item.line_color if item.line_color is not None else item.color
-                    line, = target.plot(
-                        item.frames, item.plotting_values,
-                        label=item.label, color=line_color, alpha=item.line_alpha,
-                        linestyle=item.linestyle, linewidth=item.linewidth,
-                        solid_capstyle="round", zorder=2,
-                    )
-                    artists = [line]
-                    if item.marker is not None:
-                        artists.append(target.scatter(
-                            item.frames[item.valid_mask], item.values[item.valid_mask],
-                            color=item.color, marker=item.marker,
-                            s=item.markersize ** 2,
-                            linewidths=0 if MarkerStyle(item.marker).is_filled() else 1,
-                            zorder=3, alpha=0.75,
-                        ))
-                    records.append(SeriesHandle(item, target, ax, tuple(artists)))
+                    records.append(_render_series(target, ax, item))
                 for target in groups[ax]:
                     items = [r.data for r in records if r.axis is target]
                     if items:
@@ -1670,6 +2164,7 @@ def _build_figure(spec: FigureSpec) -> PlotSession:
         dispatcher.legends = tuple(legend_series)
         dispatcher.session = session
         install_series_selector(session)
+        _register_live_session(session)
         return session
     except Exception:
         if dispatcher is not None:
