@@ -481,6 +481,48 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.click(session, target_panel, 0, 10)
         self.assertIsNotNone(controller.active_selection)
 
+    def test_blank_click_moves_target_between_panels(self):
+        source = self.make_source()
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="First")
+        target_description.subplot(2).plot([0, 1], [2, 3], label="Second")
+        target = self.build(target_description)
+        first, second = target.axes
+        self.copy_via_shortcut(source)
+        self.click(target, first, .1, .9)
+        self.assertIs(target._paste_target_axis, first)
+        first_outline = target._paste_target_outlines[first]
+        self.assertTrue(first_outline.get_visible())
+        self.click(target, second, .1, 2.9)
+        self.assertIs(target._paste_target_axis, second)
+        self.assertFalse(first_outline.get_visible())
+        self.assertTrue(target._paste_target_outlines[second].get_visible())
+        before = len(target.series)
+        send_key_event(target, "ctrl+v")
+        self.assertEqual(len(target.series), before + 1)
+        self.assertIs(target.series[-1].primary_axis, second)
+
+    def test_normal_escape_is_local_when_no_selection_mode_remains(self):
+        source = self.make_source()
+        self.copy_via_shortcut(source)
+        source.close()
+        self.assertTrue(series_clipboard.is_active())
+        target_description = figure(rows=1, cols=2)
+        target_description.subplot(1).plot([0, 1], [0, 1], label="First")
+        target_description.subplot(2).plot([0, 1], [2, 3], label="Second")
+        target = self.build(target_description)
+        second = target.axes[1]
+        self.click(target, second, .1, 2.9)
+        self.assertIs(target._paste_target_axis, second)
+        send_key_event(target, "escape")
+        self.assertIsNone(target._paste_target_axis)
+        self.assertTrue(series_clipboard.is_active())
+        self.click(target, second, .1, 2.9)
+        self.assertIs(target._paste_target_axis, second)
+        before = len(target.series)
+        send_key_event(target, "ctrl+v")
+        self.assertEqual(len(target.series), before + 1)
+
     def test_escape_in_target_exits_source_selection_mode_and_disarms(self):
         source = self.make_source()
         target_description = figure(rows=1, cols=2)
