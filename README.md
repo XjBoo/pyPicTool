@@ -60,7 +60,8 @@ For export without a GUI event loop, use `session.figure.savefig("result.png")`.
 `toggle_axes_maximized(axis)`, and `restore_layout()`. Disconnect and close are
 idempotent. Use the description to configure plots before building: direct
 Matplotlib data/structure edits after build are outside the interaction contract.
-Live updates and adding curves after build are unsupported; create a new figure.
+Except for adding a curve through whole-line copy/paste, live updates and other curve
+additions after build are unsupported; create a new figure.
 
 Run the two-window example (custom grid, empty panel, Chinese headings and styles):
 

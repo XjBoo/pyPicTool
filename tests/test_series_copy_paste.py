@@ -19,6 +19,16 @@ from tests.test_public_api import (
 
 
 class SessionTestCase(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        live_before = {id(session) for session in core._live_sessions()}
+        self.addCleanup(
+            lambda: self.assertEqual(
+                {id(session) for session in core._live_sessions()} - live_before,
+                set(),
+            ),
+        )
+
     def build(self, description):
         session = description.build()
         self.addCleanup(session.close)
@@ -106,6 +116,7 @@ class SeriesClipboardTests(unittest.TestCase):
 
 class RuntimeSeriesAppendTests(SessionTestCase):
     def setUp(self):
+        super().setUp()
         series_clipboard.clear()
         self.addCleanup(series_clipboard.clear)
 
@@ -186,6 +197,25 @@ class RuntimeSeriesAppendTests(SessionTestCase):
         session.restore_layout()
         self.assertEqual(tuple(primary.get_position().bounds), left_position)
         self.assertEqual(tuple(right.get_position().bounds), right_position)
+
+    def test_right_axis_paste_into_empty_panel_fits_shared_x(self):
+        description = figure(rows=1, cols=2)
+        description.subplot(1).plot([0, 1], [0, 1], label="Existing")
+        description.subplot(2)
+        session = self.build(description)
+        record = session._append_series(
+            SeriesData(
+                [10, 20], [100, 200], "Right on empty", yaxis="right",
+            ),
+            session.axes[1],
+        )
+        self.assertIsNotNone(record)
+        primary = session.axes[1]
+        right = session.right_axes[2]
+        self.assertLess(primary.get_xlim()[0], 10)
+        self.assertGreater(primary.get_xlim()[1], 20)
+        self.assertEqual(primary.get_xlim(), right.get_xlim())
+        np.testing.assert_array_equal(record.artists[0].get_xdata(), [10, 20])
 
     def test_new_controllers_use_overlay_when_panel_has_twin_axis(self):
         description = figure(rows=1, cols=2)
@@ -346,6 +376,7 @@ class ManualAcceptanceSceneTests(unittest.TestCase):
 
 class SeriesCopyPasteInteractionTests(SessionTestCase):
     def setUp(self):
+        super().setUp()
         series_clipboard.clear()
         self.addCleanup(series_clipboard.clear)
 
@@ -572,6 +603,47 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertIs(target._dispatcher.layout.maximized_axes, first)
         target.restore_layout()
 
+    def test_dragged_legend_position_and_alpha_survive_paste(self):
+        description = figure()
+        description.subplot(
+            1, legend_loc="upper right", legend_frame_alpha=0.3,
+        ).plot([0, 1], [0, 1], label="Existing")
+        session = self.build(description)
+        axis = session.axes[0]
+        canvas = session.figure.canvas
+        canvas.draw()
+        legend = axis.get_legend()
+        box = legend.get_window_extent()
+        x, y = box.x0 + box.width / 2, box.y0 + box.height / 2
+        send_canvas_mouse_event(session, "button_press_event", x, y, button=1)
+        send_canvas_mouse_event(session, "button_release_event", x, y, button=1)
+        send_canvas_mouse_event(session, "button_press_event", x, y, button=1)
+        send_canvas_mouse_event(
+            session, "motion_notify_event", x - 60, y - 35, button=1,
+        )
+        send_canvas_mouse_event(
+            session, "button_release_event", x - 60, y - 35, button=1,
+        )
+        self.assertFalse(legend._corner_auto)
+        manual_location = legend._loc
+        self.assertIsInstance(manual_location, tuple)
+
+        series_clipboard.store_series(
+            SeriesData([0, 1], [1, 0], "Pasted"),
+        )
+        self.click(session, axis, .1, .9)
+        self.assertIs(session._paste_target_axis, axis)
+        send_key_event(session, "ctrl+v")
+        refreshed = axis.get_legend()
+        self.assertIsNot(refreshed, legend)
+        self.assertEqual(refreshed._loc, manual_location)
+        self.assertFalse(refreshed._corner_auto)
+        self.assertAlmostEqual(refreshed.get_frame().get_alpha(), 0.3)
+        self.assertEqual(
+            [text.get_text() for text in refreshed.texts],
+            ["Existing", "Pasted"],
+        )
+
     def test_legend_click_in_selection_mode_does_not_confirm_target(self):
         description = figure()
         subplot = description.subplot(1)
@@ -791,6 +863,17 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertIsNone(target._paste_preview_axis)
         self.assertEqual(target._paste_target_outlines, {})
         self.assertEqual(target._paste_preview_outlines, {})
+        self.assertNotIn(id(target), core._LIVE_SESSIONS)
+        self.assertTrue(series_clipboard.is_active())
+        target.close()
+
+    def test_disconnect_removes_live_session_registry_without_disarming(self):
+        series_clipboard.store_series(
+            SeriesData([0, 1], [10, 20], "Waiting")
+        )
+        target = self.build(figure(rows=1, cols=2))
+        self.assertIn(id(target), core._LIVE_SESSIONS)
+        target.disconnect()
         self.assertNotIn(id(target), core._LIVE_SESSIONS)
         self.assertTrue(series_clipboard.is_active())
         target.close()

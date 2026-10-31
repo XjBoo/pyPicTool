@@ -1962,6 +1962,7 @@ class PlotSession:
         button = getattr(self.figure.canvas, "_series_selector", None)
         if button is not None:
             button.setEnabled(False)
+        _unregister_live_session(self)
 
     def close(self) -> None:
         if self._closed:

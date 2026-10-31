@@ -140,11 +140,18 @@ def main():
     source_canvas.setFocus()
     app.processEvents()
     assert source_canvas.hasFocus()
+    system_clipboard = QtWidgets.QApplication.clipboard()
+    system_clipboard_before = (
+        system_clipboard.text(), system_clipboard.image().cacheKey(),
+    )
     send_qt_key(
         source_canvas, QtCore.Qt.Key.Key_C,
         QtCore.Qt.KeyboardModifier.ControlModifier,
     )
     assert series_clipboard.get_series().label == "Copied"
+    assert (
+        system_clipboard.text(), system_clipboard.image().cacheKey(),
+    ) == system_clipboard_before
     assert source.series_selection_mode and source_selector.isChecked()
     assert source.selected_series is source.series[0]
 
