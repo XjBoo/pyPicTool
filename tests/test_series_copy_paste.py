@@ -444,6 +444,15 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertLess(
             preview.get_linewidth(), target_outline.get_linewidth(),
         )
+        self.assertIs(target_outline.axes, second)
+        self.assertIn(target_outline, target._layer.items)
+        target.figure.canvas.draw()
+        renderer = target.figure.canvas.get_renderer()
+        np.testing.assert_allclose(
+            target_outline.get_window_extent(renderer).bounds,
+            second.get_window_extent(renderer).bounds,
+            atol=1e-6,
+        )
         self.assertIs(target.controllers[1].active_selection, active)
 
         send_mouse_event(target, "motion_notify_event", first, .5, .5)
@@ -472,6 +481,13 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertIs(target.controllers[1].active_selection, active)
 
         target.toggle_axes_maximized(second)
+        target.figure.canvas.draw()
+        renderer = target.figure.canvas.get_renderer()
+        np.testing.assert_allclose(
+            target_outline.get_window_extent(renderer).bounds,
+            second.get_window_extent(renderer).bounds,
+            atol=1e-6,
+        )
         send_key_event(target, "escape")
         self.assertIsNone(target._paste_target_axis)
         self.assertFalse(target_outline.get_visible())
@@ -536,6 +552,9 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         self.assertFalse(session.series_selection_mode)
         self.assertIsNone(session._paste_target_axis)
         self.assertFalse(series_clipboard.is_active())
+        legend = target_panel.get_legend()
+        self.assertTrue(legend.get_draggable())
+        self.assertIn(legend, session._dispatcher.legends)
         controller = next(
             controller for controller in session.controllers
             if controller.ax is target_panel
@@ -636,6 +655,9 @@ class SeriesCopyPasteInteractionTests(SessionTestCase):
         send_key_event(session, "ctrl+v")
         refreshed = axis.get_legend()
         self.assertIsNot(refreshed, legend)
+        self.assertIs(axis.get_legend(), refreshed)
+        self.assertIn(refreshed, session._dispatcher.legends)
+        self.assertTrue(refreshed.get_draggable())
         self.assertEqual(refreshed._loc, manual_location)
         self.assertFalse(refreshed._corner_auto)
         self.assertAlmostEqual(refreshed.get_frame().get_alpha(), 0.3)

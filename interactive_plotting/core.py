@@ -1951,7 +1951,6 @@ class PlotSession:
         if self._closed:
             return
         self.disconnect()
-        _unregister_live_session(self)
 
     def disconnect(self) -> None:
         self._dispose_paste_outlines()
@@ -1970,7 +1969,6 @@ class PlotSession:
         self.disconnect()
         plt.close(self.figure)
         self._closed = True
-        _unregister_live_session(self)
 
     def remove_selected_cursor(self) -> bool:
         return self._dispatcher.remove_selected_cursor()
