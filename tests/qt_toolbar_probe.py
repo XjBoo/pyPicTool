@@ -3,9 +3,18 @@ import io
 import matplotlib
 matplotlib.use("QtAgg")
 import matplotlib.pyplot as plt
-from matplotlib.backends.qt_compat import QtCore, QtWidgets
+from matplotlib.backends.qt_compat import QtCore, QtGui, QtWidgets
 from matplotlib.backend_bases import MouseEvent, KeyEvent
 from interactive_plotting import SeriesData, create_interactive_plot
+from interactive_plotting import series_clipboard
+
+
+def send_qt_key(widget, key, modifiers=QtCore.Qt.KeyboardModifier.NoModifier):
+    event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress, key, modifiers,
+    )
+    QtWidgets.QApplication.sendEvent(widget, event)
+    QtWidgets.QApplication.instance().processEvents()
 
 
 def main():
@@ -107,6 +116,132 @@ def main():
         "key_press_event", canvas, key="escape"))
     assert not session.series_selection_mode and not selector.isChecked()
     assert selector.x() + selector.width() < button.x()
+
+    series_clipboard.clear()
+    source = create_interactive_plot([
+        SeriesData([0, 1, 2], [10, 20, 30], "Copied", marker=None),
+    ])
+    source_manager = source.figure.canvas.manager
+    source_manager.show()
+    source_canvas = source.figure.canvas
+    source_axis = source.axes[0]
+    source_selector = source_canvas.findChild(
+        QtWidgets.QToolButton, "plotSeriesSelector",
+    )
+    assert source_selector is not None
+    source_selector.click()
+    source_canvas.draw()
+    source_canvas.callbacks.process("button_press_event", MouseEvent(
+        "button_press_event", source_canvas,
+        *source_axis.transData.transform((0, 10)), button=1,
+    ))
+    assert source.selected_series is source.series[0]
+    source_manager.window.activateWindow()
+    source_canvas.setFocus()
+    app.processEvents()
+    assert source_canvas.hasFocus()
+    system_clipboard = QtWidgets.QApplication.clipboard()
+    system_clipboard_before = (
+        system_clipboard.text(), system_clipboard.image().cacheKey(),
+    )
+    send_qt_key(
+        source_canvas, QtCore.Qt.Key.Key_C,
+        QtCore.Qt.KeyboardModifier.ControlModifier,
+    )
+    assert series_clipboard.get_series().label == "Copied"
+    assert (
+        system_clipboard.text(), system_clipboard.image().cacheKey(),
+    ) == system_clipboard_before
+    assert source.series_selection_mode and source_selector.isChecked()
+    assert source.selected_series is source.series[0]
+
+    manager.window.activateWindow()
+    canvas.setFocus()
+    app.processEvents()
+    assert canvas.hasFocus()
+    baseline_series = len(session.series)
+    canvas.draw()
+    panel_x, panel_y = axis.transData.transform((.5, .5))
+    canvas.callbacks.process("motion_notify_event", MouseEvent(
+        "motion_notify_event", canvas, panel_x, panel_y,
+    ))
+    assert session._paste_preview_axis is axis
+    assert session._paste_preview_outlines[axis].get_visible()
+    for name in ("button_press_event", "button_release_event"):
+        canvas.callbacks.process(name, MouseEvent(
+            name, canvas, panel_x, panel_y, button=1,
+        ))
+    assert session._paste_target_axis is axis
+    assert session._paste_target_outlines[axis].get_visible()
+    canvas.setFocus()
+    send_qt_key(
+        canvas, QtCore.Qt.Key.Key_V,
+        QtCore.Qt.KeyboardModifier.ControlModifier,
+    )
+    assert len(session.series) == baseline_series + 1
+    assert session.series[-1].data.label == "Copied"
+    send_qt_key(
+        canvas, QtCore.Qt.Key.Key_V,
+        QtCore.Qt.KeyboardModifier.MetaModifier,
+    )
+    assert len(session.series) == baseline_series + 2
+    assert [text.get_text() for text in axis.get_legend().texts] == [
+        "Copied", "Copied",
+    ]
+    assert session._paste_target_axis is axis
+    send_qt_key(canvas, QtCore.Qt.Key.Key_Escape)
+    assert session._paste_target_axis is None
+    assert not session._paste_target_outlines[axis].get_visible()
+    assert series_clipboard.get_series() is not None
+    assert not source.series_selection_mode
+    assert not source_selector.isChecked()
+    assert not series_clipboard.is_active()
+
+    # The target-window Esc exited every mode; re-entering L in that window
+    # reactivates the retained snapshot.
+    manager.window.activateWindow()
+    canvas.setFocus()
+    app.processEvents()
+    blank_x, blank_y = axis.transData.transform((.1, 29))
+    before_disarmed = len(session.series)
+    canvas.callbacks.process("motion_notify_event", MouseEvent(
+        "motion_notify_event", canvas, blank_x, blank_y,
+    ))
+    assert session._paste_preview_axis is None
+    for name in ("button_press_event", "button_release_event"):
+        canvas.callbacks.process(name, MouseEvent(
+            name, canvas, blank_x, blank_y, button=1,
+        ))
+    assert session._paste_target_axis is None
+    send_qt_key(
+        canvas, QtCore.Qt.Key.Key_V,
+        QtCore.Qt.KeyboardModifier.ControlModifier,
+    )
+    assert len(session.series) == before_disarmed
+    send_qt_key(canvas, QtCore.Qt.Key.Key_L)
+    assert session.series_selection_mode
+    assert series_clipboard.is_active()
+    canvas.callbacks.process("motion_notify_event", MouseEvent(
+        "motion_notify_event", canvas, blank_x, blank_y,
+    ))
+    assert session._paste_preview_axis is axis
+    for name in ("button_press_event", "button_release_event"):
+        canvas.callbacks.process(name, MouseEvent(
+            name, canvas, blank_x, blank_y, button=1,
+        ))
+    assert session._paste_target_axis is axis
+    send_qt_key(
+        canvas, QtCore.Qt.Key.Key_V,
+        QtCore.Qt.KeyboardModifier.ControlModifier,
+    )
+    assert len(session.series) == before_disarmed + 1
+
+    source.close()
+    assert not plt.fignum_exists(source.figure.number)
+    assert series_clipboard.get_series().label == "Copied"
+    assert series_clipboard.is_active()
+    series_clipboard.clear()
+
     session.disconnect()
     assert not selector.isEnabled()
     session.close()

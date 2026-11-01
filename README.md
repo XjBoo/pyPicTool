@@ -60,7 +60,8 @@ For export without a GUI event loop, use `session.figure.savefig("result.png")`.
 `toggle_axes_maximized(axis)`, and `restore_layout()`. Disconnect and close are
 idempotent. Use the description to configure plots before building: direct
 Matplotlib data/structure edits after build are outside the interaction contract.
-Live updates and adding curves after build are unsupported; create a new figure.
+Except for adding a curve through whole-line copy/paste, live updates and other curve
+additions after build are unsupported; create a new figure.
 
 Run the two-window example (custom grid, empty panel, Chinese headings and styles):
 
@@ -276,13 +277,43 @@ fig.subplot(1, legend_loc="best_corner", legend_frame_alpha=0.3)
 工具栏处于 pan/zoom 时数据交互暂停；点击“选线”会退出 pan/zoom。
 缺失值之间的断线区域不会被当作线段选中。
 
+选中曲线后按 **Ctrl+C**（macOS 也可用 **Cmd+C**）可把完整曲线快照复制到同一 Python 进程的
+曲线剪贴板，并激活跨窗口复制会话。复制会话有效时，目标 Figure 不需要进入整线模式：
+在整线模式中点击曲线或图例仍优先执行整线选择，只有点击面板空白区域才选择粘贴目标；
+在其他窗口的普通点模式中，点击数据点和 tooltip 仍执行点交互，同样只有点击空白区域才选择目标。
+已显示的游标提示不算空白区域。可作为目标的空白区域悬停时显示浅色虚线预览框，
+点击后显示明确的蓝色目标框，按 **Ctrl+V/Cmd+V** 把数据、标签、样式和左右轴归属一起粘贴到该面板。
+
+同一 Figure 内复制后无需退出整线模式，直接点击其他子图的空白区域即可粘贴。
+单面板窗口无需预先点击即可直接粘贴；多面板窗口在普通布局下必须先确认目标，若双击放大到
+仅一个可见面板，则按单面板默认目标处理。粘贴保留源曲线并允许连续粘贴同名曲线，
+目标面板会更新图例和坐标范围，其他面板视图不变。
+
+只要任意 Figure 仍处于整线模式，在任意窗口按 **Esc** 都会退出所有 Figure 的整线模式，
+同时停用所有窗口的目标框选并隐藏目标框，粘贴快捷键不再新增曲线，但快照仍保留。
+重新按 **L** 进入任一 Figure 的整线模式会重新激活已有快照。**L** 和“选线”按钮只切换当前
+Figure 的模式；如果仍有其他 Figure 保持整线模式，复制会话继续有效，只有最后一个整线模式
+退出时才停用。如果没有任何 Figure 处于整线模式，普通点模式中的 **Esc** 只取消本窗口目标
+高亮，不停用复制会话。关闭源窗口不会停用复制会话。该剪贴板不读写操作系统剪贴板，也不支持
+跨进程传输。工具栏 pan/zoom、图例拖动或数据点拖动期间不会确认目标或执行复制粘贴。
+
+专用手工验收场景包含同图跨子图、跨 Figure、空白面板、动态右轴、连续粘贴、Esc 和关闭源窗口：
+
+```console
+venv/bin/python -m examples.copy_paste_manual --check
+venv/bin/python -m examples.copy_paste_manual
+```
+
+`--check` 只构建并校验场景，不显示窗口；无参数运行会打开两张 Figure 并在终端打印逐项步骤。
+
 程序化删除使用稳定句柄：`session.remove_series(session.series[0])`。
 `session.series` 按面板行优先、面板内添加顺序保留所有句柄，删除后不重编号；
 `handle.removed` 表示是否已删除，`handle.data` / `handle.axis` 用于查看数据和所属轴。
 同名及未命名曲线都可独立删除。重复删除返回 False，传入其他会话的句柄抛 ValueError，
 关闭或断开后不再删除。删除会清理对应游标与图例、保留其他曲线的选择，并自动适配
 剩余数据范围；无数据的轴恢复 0..1。仅影响所属面板，不改变其他面板视图。
-新增曲线、实时更新数据以及直接修改 Matplotlib 图元仍不属于会话接口。
+通过整线复制粘贴增加曲线是支持的运行时操作；其他新增曲线、实时更新数据以及直接修改
+Matplotlib 图元仍不属于会话接口。
 
 公开规格也可直接构建：
 
